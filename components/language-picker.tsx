@@ -3,6 +3,7 @@
 import Fuse from "fuse.js";
 import { ArrowLeft, Search } from "lucide-react";
 import { useDeferredValue, useMemo, useState } from "react";
+import { useI18n } from "@/components/i18n-provider";
 import { Input } from "@/components/ui/input";
 import type { LanguageRecord } from "@/lib/languages";
 
@@ -21,6 +22,7 @@ export function LanguagePicker({
   onSelect: (language: LanguageRecord) => void;
   onClear: () => void;
 }) {
+  const { messages } = useI18n();
   const [query, setQuery] = useState("");
   // Keeps typing responsive: the ~8k-entry Fuse search re-runs at lower
   // priority than the input's own re-render instead of blocking each
@@ -93,7 +95,7 @@ export function LanguagePicker({
           type="button"
           onClick={onClear}
           className="flex h-9 w-9 shrink-0 items-center justify-center border border-border bg-paper-raised text-ink-soft hover:border-navy hover:text-navy"
-          aria-label="Choose a different language"
+          aria-label={messages.picker.back}
         >
           <ArrowLeft className="h-5 w-5" aria-hidden />
         </button>
@@ -116,8 +118,8 @@ export function LanguagePicker({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={loading ? "Loading languages..." : "Search your language..."}
-          aria-label="Search for your language"
+          placeholder={loading ? messages.picker.loading : messages.picker.placeholder}
+          aria-label={messages.picker.searchLabel}
           className="h-12 pl-11 pr-4 text-base"
           autoComplete="off"
           disabled={loading}
@@ -126,7 +128,7 @@ export function LanguagePicker({
 
       {deferredQuery.trim().length > 0 && results.length === 0 && (
         <p className="absolute z-10 mt-1 w-full border border-border bg-paper-raised px-4 py-3 text-ink-soft shadow-md">
-          No matches — try another spelling, or the name in your own language.
+          {messages.picker.noMatches}
         </p>
       )}
 

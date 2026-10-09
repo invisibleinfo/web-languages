@@ -24,9 +24,17 @@ npm run dev
 ### Database
 
 Run `supabase/schema.sql` in the Supabase SQL Editor to create `languages`,
-`repo_links`, `submissions`, and the `public_submissions` view. It is safe to
-re-run, and also upgrades a v2 database (drops the old category, name and
-email columns).
+`repo_links`, `submissions`, and the views the site reads. It only creates
+and adds (never drops), so it is safe to re-run on an existing database to
+pick up new columns.
+
+### Interface languages
+
+Site text lives in `lib/i18n/messages/` — `en.ts` is the source of truth
+and each other language file must have exactly the same keys (the
+typecheck and `lib/i18n/i18n.test.ts` both enforce this). To add a
+language: add it to `LOCALES` in `lib/i18n/locales.ts`, add its messages
+file, and register it in `lib/i18n/load-messages.ts`.
 
 Then seed the language reference data and the known GitHub links:
 

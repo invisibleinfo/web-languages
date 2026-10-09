@@ -29,11 +29,16 @@ create table if not exists submissions (
   url text not null,
   note text,
   session_id text,                     -- random id kept in the visitor's browser
+  ui_locale text,                      -- interface language in use, e.g. 'hi'
   status text not null default 'pending' check (status in ('pending', 'approved', 'rejected', 'duplicate')),
   reviewed_by text,
   reviewed_at timestamptz,
   submitted_at timestamptz not null default now()
 );
+
+-- Columns added after the table was first created. Adding never deletes
+-- anything; on a new project these are no-ops.
+alter table submissions add column if not exists ui_locale text;
 
 create index if not exists submissions_language_id_idx on submissions(language_id);
 create index if not exists submissions_status_idx on submissions(status);

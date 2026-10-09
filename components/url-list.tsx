@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useI18n } from "@/components/i18n-provider";
 
 const COLLAPSED_COUNT = 3;
 
@@ -16,13 +17,16 @@ export function UrlList({
   heading,
   items,
   total,
+  failed = false,
   onMore,
 }: {
   heading: string;
   items: UrlListItem[];
   total: number;
+  failed?: boolean;
   onMore: () => Promise<void>;
 }) {
+  const { locale, messages } = useI18n();
   const [loadingMore, setLoadingMore] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const visible = expanded ? items : items.slice(0, COLLAPSED_COUNT);
@@ -46,12 +50,16 @@ export function UrlList({
         {heading}
         {total > 0 && (
           <span className="ml-2 text-base font-sans font-normal italic text-ink-soft">
-            {total.toLocaleString("en-US")}
+            {total.toLocaleString(locale)}
           </span>
         )}
       </h3>
-      {items.length === 0 ? (
-        <p className="text-ink-soft">None yet</p>
+      {failed ? (
+        <p role="alert" className="font-semibold text-pending">
+          {messages.lists.loadFailed}
+        </p>
+      ) : items.length === 0 ? (
+        <p className="text-ink-soft">{messages.lists.none}</p>
       ) : (
         <>
           <ul className="flex flex-col gap-2">
@@ -78,7 +86,7 @@ export function UrlList({
                   disabled={loadingMore}
                   className="text-sm font-semibold text-navy underline underline-offset-2 disabled:opacity-60"
                 >
-                  {loadingMore ? "Loading..." : "See more"}
+                  {loadingMore ? messages.lists.loading : messages.lists.more}
                 </button>
               )}
               {showLess && (
@@ -87,7 +95,7 @@ export function UrlList({
                   onClick={() => setExpanded(false)}
                   className="text-sm font-semibold text-navy underline underline-offset-2"
                 >
-                  See less
+                  {messages.lists.less}
                 </button>
               )}
             </div>

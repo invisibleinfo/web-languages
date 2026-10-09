@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { chunkByLength } from "@/lib/chunk";
 import { submissionPayloadSchema } from "@/lib/validation";
 
 /** The same address with and without a trailing slash, so
@@ -18,7 +19,7 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const { languageId, links, sessionId, honeypot } = parsed.data;
+  const { languageId, links, sessionId, uiLocale, honeypot } = parsed.data;
 
   // A filled honeypot means a bot. Pretend success so it doesn't learn to
   // look elsewhere, but never write the row.
@@ -31,26 +32,28 @@ export async function POST(request: Request) {
   // Drop links this language already has: in the synced repo list, or in a
   // submission that wasn't rejected (rejected ones may be re-sent), plus
   // repeats within this same batch.
-  const candidates = links.flatMap((link) => urlVariants(link.url));
-  const [existingListed, existingSubmitted] = await Promise.all([
-    supabase.from("repo_links").select("url").eq("language_id", languageId).in("url", candidates),
-    supabase
-      .from("submissions")
-      .select("url")
-      .eq("language_id", languageId)
-      .in("status", ["pending", "approved", "duplicate"])
-      .in("url", candidates),
-  ]);
-  const lookupError = existingListed.error ?? existingSubmitted.error;
+  // The URLs travel in the query string, which Supabase rejects past roughly
+  // 15 KB — so they're looked up in batches small enough to stay well under.
+  const lookups = chunkByLength(links.flatMap((link) => urlVariants(link.url))).flatMap(
+    (batch) => [
+      supabase.from("repo_links").select("url").eq("language_id", languageId).in("url", batch),
+      supabase
+        .from("submissions")
+        .select("url")
+        .eq("language_id", languageId)
+        .in("status", ["pending", "approved", "duplicate"])
+        .in("url", batch),
+    ],
+  );
+  const results = await Promise.all(lookups);
+  const lookupError = results.find((result) => result.error)?.error;
   if (lookupError) {
     console.error("duplicate lookup failed", lookupError);
     return NextResponse.json({ error: "Could not save submission" }, { status: 500 });
   }
 
   const taken = new Set(
-    [...(existingListed.data ?? []), ...(existingSubmitted.data ?? [])].flatMap((row) =>
-      urlVariants(row.url),
-    ),
+    results.flatMap((result) => result.data ?? []).flatMap((row) => urlVariants(row.url)),
   );
   const fresh = links.filter((link) => {
     if (taken.has(link.url)) return false;
@@ -70,6 +73,7 @@ export async function POST(request: Request) {
     url: link.url,
     note: link.note || null,
     session_id: sessionId,
+    ui_locale: uiLocale,
   }));
   const { error } = await supabase.from("submissions").insert(rows);
   if (error) {

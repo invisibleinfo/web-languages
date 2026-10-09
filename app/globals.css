@@ -21,7 +21,12 @@
      headings. Its optical-size axis renders a sturdier text cut at body
      sizes and a more expressive display cut at heading sizes on its own —
      one family, two readable registers. */
-  --font-serif: var(--font-fraunces), Georgia, serif;
+  --font-serif: var(--font-fraunces), Georgia, "Noto Serif Devanagari", "Noto Serif SC",
+    "Noto Serif JP", serif;
+  /* Fraunces only covers Latin. For Russian, Hindi, Chinese and Japanese
+     the browser falls back, character by character, to the fonts listed
+     above if the device has them, else to its own serif for <html lang>.
+     No extra font downloads. */
 }
 
 @theme inline {

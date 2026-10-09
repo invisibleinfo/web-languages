@@ -1,5 +1,9 @@
 import type { Metadata } from "next";
 import { Fraunces, IBM_Plex_Mono } from "next/font/google";
+import { headers } from "next/headers";
+import { I18nProvider } from "@/components/i18n-provider";
+import { loadMessages } from "@/lib/i18n/load-messages";
+import { pickLocale } from "@/lib/i18n/locales";
 import "./globals.css";
 
 // One serif family for both body and headings — Cormorant Garamond's low
@@ -21,19 +25,31 @@ const plexMono = IBM_Plex_Mono({
   weight: ["400", "500", "600"],
 });
 
-export const metadata: Metadata = {
-  title: "LingoCrawlUI — Share a website for your language",
-  description:
-    "Help Common Crawl's web-languages project by sharing a website in your language — no GitHub account needed.",
-};
+// The interface language comes from the browser's Accept-Language header
+// on every request — nothing is stored (see docs/decisions.md).
+async function requestLocale() {
+  return pickLocale((await headers()).get("accept-language"));
+}
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export async function generateMetadata(): Promise<Metadata> {
+  const { meta } = await loadMessages(await requestLocale());
+  return { title: meta.title, description: meta.description };
+}
+
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const locale = await requestLocale();
+  const messages = await loadMessages(locale);
+
   return (
     <html
-      lang="en"
+      lang={locale}
       className={`${fraunces.variable} ${plexMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-paper text-ink">{children}</body>
+      <body className="min-h-full flex flex-col bg-paper text-ink">
+        <I18nProvider initialLocale={locale} initialMessages={messages}>
+          {children}
+        </I18nProvider>
+      </body>
     </html>
   );
 }

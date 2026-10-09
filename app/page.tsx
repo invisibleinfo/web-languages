@@ -2,17 +2,20 @@
 
 import { Check, Languages } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useI18n } from "@/components/i18n-provider";
 import { LanguagePicker } from "@/components/language-picker";
 import { Button } from "@/components/ui/button";
 import { SubmissionForm } from "@/components/submission-form";
+import { UiLanguageSelect } from "@/components/ui-language-select";
 import { UrlList, type UrlListItem } from "@/components/url-list";
+import { formatNodes, plural } from "@/lib/i18n/format";
 import { loadLanguages, type LanguageRecord } from "@/lib/languages";
 import { supabase } from "@/lib/supabase/client";
 
 const FIRST_PAGE = 3;
 const MORE_PAGE = 20;
 
-type ListState = { items: UrlListItem[]; total: number };
+type ListState = { items: UrlListItem[]; total: number; failed?: boolean };
 const EMPTY_LIST: ListState = { items: [], total: 0 };
 
 type ListSource = {
@@ -29,12 +32,14 @@ async function fetchList(
   from: number,
   to: number,
 ): Promise<ListState> {
-  const { data, count } = await supabase
+  const { data, count, error } = await supabase
     .from(source.table)
     .select("url, note", { count: "exact" })
     .eq("language_id", languageId)
     .order(source.orderBy, { ascending: source.ascending })
     .range(from, to);
+  // A failed read must not look like "None yet".
+  if (error) return { items: [], total: 0, failed: true };
   return { items: (data as UrlListItem[]) ?? [], total: count ?? 0 };
 }
 
@@ -50,28 +55,37 @@ function StatStrip({
   languagesWithSources: number | null;
   statsLoading: boolean;
 }) {
-  const showSecond = statsLoading || languagesWithSources !== null;
+  const { locale, messages } = useI18n();
+  const number = (value: number) => (
+    <span className="font-mono tabular-data font-semibold text-ink">
+      {value.toLocaleString(locale)}
+    </span>
+  );
+  const total =
+    totalLanguages === null ? (
+      <span className="font-mono tabular-data font-semibold text-ink">···</span>
+    ) : (
+      number(totalLanguages)
+    );
+
+  // Once the source count resolved to "unavailable", show only the total.
+  if (!statsLoading && languagesWithSources === null) {
+    return (
+      <p className="text-center text-lg text-ink-soft">
+        {formatNodes(messages.home.statsTotal, { total })}
+      </p>
+    );
+  }
   return (
     <p className="text-center text-lg text-ink-soft">
-      We&apos;re already tracking{" "}
-      <span className="font-mono tabular-data font-semibold text-ink">
-        {totalLanguages === null ? "···" : totalLanguages.toLocaleString("en-US")}
-      </span>{" "}
-      languages
-      {showSecond && (
-        <>
-          {" — "}
-          {statsLoading ? (
-            <span className="inline-block h-4 w-10 animate-pulse bg-border align-middle" aria-hidden />
-          ) : (
-            <span className="font-mono tabular-data font-semibold text-ink">
-              {languagesWithSources!.toLocaleString("en-US")}
-            </span>
-          )}{" "}
-          of them already have a source
-        </>
-      )}
-      .
+      {formatNodes(messages.home.statsWithSources, {
+        total,
+        count: statsLoading ? (
+          <span className="inline-block h-4 w-10 animate-pulse bg-border align-middle" aria-hidden />
+        ) : (
+          number(languagesWithSources!)
+        ),
+      })}
     </p>
   );
 }
@@ -79,16 +93,21 @@ function StatStrip({
 function SiteHeader() {
   return (
     <header className="bg-navy text-paper">
-      <div className="mx-auto flex max-w-5xl items-center gap-2 px-5 py-3">
-        <Languages className="h-5 w-5" aria-hidden />
-        <span className="font-heading text-lg font-semibold">LingoCrawl</span>
+      <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3 sm:px-5">
+        <div className="flex min-w-0 items-center gap-2">
+          <Languages className="h-5 w-5" aria-hidden />
+          <span className="font-heading text-lg font-semibold">LingoCrawl</span>
+        </div>
+        <UiLanguageSelect />
       </div>
     </header>
   );
 }
 
 export default function Home() {
+  const { locale, messages } = useI18n();
   const [languages, setLanguages] = useState<LanguageRecord[]>([]);
+  const [languagesFailed, setLanguagesFailed] = useState(false);
   const [selected, setSelected] = useState<LanguageRecord | null>(null);
   const [listed, setListed] = useState<ListState>(EMPTY_LIST);
   const [recent, setRecent] = useState<ListState>(EMPTY_LIST);
@@ -102,7 +121,9 @@ export default function Home() {
   const [languagesWithSources, setLanguagesWithSources] = useState<number | null>(null);
 
   useEffect(() => {
-    loadLanguages().then(setLanguages);
+    loadLanguages()
+      .then(setLanguages)
+      .catch(() => setLanguagesFailed(true));
   }, []);
 
   useEffect(() => {
@@ -144,6 +165,8 @@ export default function Home() {
       current.items.length + MORE_PAGE - 1,
     );
     if (activeLanguageId.current !== languageId) return;
+    // Keep what's already shown if the next page failed to load.
+    if (next.failed) return;
     set({ items: [...current.items, ...next.items], total: next.total });
   }
 
@@ -160,14 +183,15 @@ export default function Home() {
         {!selected ? (
           <>
             <div className="mx-auto flex max-w-xl flex-col items-center gap-2 text-center">
-              <h1 className="font-heading text-4xl font-semibold">
-                Share a website in your language
-              </h1>
-              <p className="text-ink-soft">
-                Help build a map of the web for every language — find yours and add a site you
-                trust.
-              </p>
+              <h1 className="font-heading text-4xl font-semibold">{messages.home.title}</h1>
+              <p className="text-ink-soft">{messages.home.subtitle}</p>
             </div>
+
+            {languagesFailed && (
+              <p role="alert" className="mx-auto max-w-xl text-center font-semibold text-pending">
+                {messages.picker.loadFailed}
+              </p>
+            )}
 
             <LanguagePicker
               languages={languages}
@@ -196,20 +220,24 @@ export default function Home() {
               {thanks !== null ? (
                 <section className="border-y border-verified py-8 text-center">
                   <Check className="mx-auto mb-3 h-10 w-10 text-verified" aria-hidden />
-                  <h2 className="font-heading text-2xl font-semibold">Thank you!</h2>
+                  <h2 className="font-heading text-2xl font-semibold">{messages.thanks.title}</h2>
                   <p className="mt-1 text-ink-soft">
                     {thanks.added > 0
-                      ? `You shared ${thanks.added} ${thanks.added === 1 ? "link" : "links"} for ${selected.refName}.`
-                      : "We already have these links."}
-                    {thanks.added > 0 && thanks.skipped > 0 && ` ${thanks.skipped} we already had.`}
+                      ? plural(locale, messages.thanks.shared, thanks.added, {
+                          language: selected.refName,
+                        })
+                      : messages.thanks.allDuplicates}
+                    {thanks.added > 0 &&
+                      thanks.skipped > 0 &&
+                      ` ${plural(locale, messages.thanks.alreadyHad, thanks.skipped)}`}
                   </p>
                   <Button type="button" onClick={() => setThanks(null)} className="mt-4">
-                    Add more
+                    {messages.thanks.addMore}
                   </Button>
                 </section>
               ) : (
                 <section className="flex flex-col gap-4">
-                  <h2 className="font-heading text-xl font-semibold">Add a website</h2>
+                  <h2 className="font-heading text-xl font-semibold">{messages.form.heading}</h2>
                   <SubmissionForm
                     languageId={selected.id}
                     onSubmitted={(result) => {
@@ -221,19 +249,21 @@ export default function Home() {
               )}
 
               {loadingLists ? (
-                <p className="text-ink-soft">Loading...</p>
+                <p className="text-ink-soft">{messages.lists.loading}</p>
               ) : (
                 <>
                   <UrlList
-                    heading="Already listed"
+                    heading={messages.lists.listed}
                     items={listed.items}
                     total={listed.total}
+                    failed={listed.failed}
                     onMore={() => loadMore(LISTED, selected.id, listed, setListed)}
                   />
                   <UrlList
-                    heading="Recently added"
+                    heading={messages.lists.recent}
                     items={recent.items}
                     total={recent.total}
+                    failed={recent.failed}
                     onMore={() => loadMore(RECENT, selected.id, recent, setRecent)}
                   />
                 </>

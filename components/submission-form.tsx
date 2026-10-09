@@ -2,24 +2,20 @@
 
 import { Check, TriangleAlert } from "lucide-react";
 import { useId, useState } from "react";
+import { useI18n } from "@/components/i18n-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { format } from "@/lib/i18n/format";
+import { isWebAddress, withScheme } from "@/lib/url";
 
 const MAX_ROWS = 20;
+
+type FormError = "errorEmpty" | "errorInvalid" | "errorRejected" | "errorNetwork";
 
 type Row = { key: string; url: string; note: string };
 
 function newRow(): Row {
   return { key: crypto.randomUUID(), url: "", note: "" };
-}
-
-/** If the visitor typed a bare domain ("bbc.com/cymrufyw"), assume https —
- * this audience will not reliably type a scheme, and the schema requires
- * one. Leaves anything that already looks like it has a scheme alone. */
-function withScheme(url: string): string {
-  const trimmed = url.trim();
-  if (trimmed.length === 0 || /^[a-z][a-z0-9+.-]*:/i.test(trimmed)) return trimmed;
-  return `https://${trimmed}`;
 }
 
 /** A random id kept in this browser, so the team can tell which
@@ -44,11 +40,15 @@ export function SubmissionForm({
   languageId: string;
   onSubmitted: (result: { added: number; skipped: number }) => void;
 }) {
+  const { locale, messages } = useI18n();
   const [rows, setRows] = useState<Row[]>([newRow()]);
   const [honeypot, setHoneypot] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  // Stored as a key, not text, so the message follows a language switch.
+  const [error, setError] = useState<FormError | null>(null);
+  const [invalidKeys, setInvalidKeys] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
   const honeypotId = useId();
+  const fieldId = useId();
 
   function updateRow(key: string, patch: Partial<Row>) {
     setRows((prev) => prev.map((row) => (row.key === key ? { ...row, ...patch } : row)));
@@ -62,14 +62,20 @@ export function SubmissionForm({
     e.preventDefault();
     setError(null);
 
-    const links = rows
-      .filter((row) => row.url.trim().length > 0)
-      .map((row) => ({ url: withScheme(row.url), note: row.note.trim() }));
-
-    if (links.length === 0) {
-      setError("Please add a website link.");
+    const filled = rows.filter((row) => row.url.trim().length > 0);
+    if (filled.length === 0) {
+      setError("errorEmpty");
       return;
     }
+
+    const invalid = filled.filter((row) => !isWebAddress(withScheme(row.url)));
+    setInvalidKeys(new Set(invalid.map((row) => row.key)));
+    if (invalid.length > 0) {
+      setError("errorInvalid");
+      return;
+    }
+
+    const links = filled.map((row) => ({ url: withScheme(row.url), note: row.note.trim() }));
 
     setSubmitting(true);
     try {
@@ -80,19 +86,20 @@ export function SubmissionForm({
           languageId,
           links,
           sessionId: getSessionId(),
+          uiLocale: locale,
           honeypot,
         }),
       });
 
       if (!response.ok) {
-        setError("That did not work. Check the link and try again.");
+        setError("errorRejected");
         return;
       }
       const result = (await response.json()) as { count: number; duplicates: number };
       setRows([newRow()]);
       onSubmitted({ added: result.count, skipped: result.duplicates });
     } catch {
-      setError("That did not work. Try again.");
+      setError("errorNetwork");
     } finally {
       setSubmitting(false);
     }
@@ -105,13 +112,24 @@ export function SubmissionForm({
           <div key={row.key} className={index > 0 ? "mt-4 border-t border-border pt-4" : ""}>
             <div className="flex items-start gap-3">
               <div className="flex-1">
-                <label className="mb-1 block text-sm font-semibold text-ink-soft">
-                  Website link
+                <label
+                  htmlFor={`${fieldId}-${row.key}-url`}
+                  className="mb-1 block text-sm font-semibold text-ink-soft"
+                >
+                  {messages.form.linkLabel}
                 </label>
                 <Input
+                  id={`${fieldId}-${row.key}-url`}
+                  aria-invalid={invalidKeys.has(row.key) || undefined}
+                  className={invalidKeys.has(row.key) ? "border-pending" : undefined}
                   placeholder="https://example.com"
                   value={row.url}
-                  onChange={(e) => updateRow(row.key, { url: e.target.value })}
+                  onChange={(e) => {
+                    updateRow(row.key, { url: e.target.value });
+                    if (invalidKeys.has(row.key)) {
+                      setInvalidKeys((prev) => new Set([...prev].filter((key) => key !== row.key)));
+                    }
+                  }}
                   onBlur={(e) => updateRow(row.key, { url: withScheme(e.target.value) })}
                   maxLength={2048}
                   inputMode="url"
@@ -123,18 +141,22 @@ export function SubmissionForm({
                   type="button"
                   onClick={() => removeRow(row.key)}
                   className="mt-7 text-sm font-semibold text-ink-soft hover:text-navy"
-                  aria-label={`Remove link ${index + 1}`}
+                  aria-label={format(messages.form.removeLabel, { number: index + 1 })}
                 >
-                  Remove
+                  {messages.form.remove}
                 </button>
               )}
             </div>
             <div className="mt-3">
-              <label className="mb-1 block text-sm font-semibold text-ink-soft">
-                Note (optional)
+              <label
+                htmlFor={`${fieldId}-${row.key}-note`}
+                className="mb-1 block text-sm font-semibold text-ink-soft"
+              >
+                {messages.form.noteLabel}
               </label>
               <Input
-                placeholder="e.g. Local news from Wales"
+                id={`${fieldId}-${row.key}-note`}
+                placeholder={messages.form.notePlaceholder}
                 value={row.note}
                 onChange={(e) => updateRow(row.key, { note: e.target.value })}
                 maxLength={280}
@@ -151,7 +173,7 @@ export function SubmissionForm({
         onClick={() => setRows((prev) => (prev.length >= MAX_ROWS ? prev : [...prev, newRow()]))}
         className="self-start"
       >
-        + Add another link
+        {messages.form.addAnother}
       </Button>
 
       {/* Honeypot: invisible to people, tempting to bots. Any fill-in
@@ -174,17 +196,17 @@ export function SubmissionForm({
           className="flex items-start gap-2 border border-pending bg-paper-raised p-3 font-semibold text-pending"
         >
           <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0" aria-hidden />
-          {error}
+          {messages.form[error]}
         </p>
       )}
 
       <Button type="submit" size="lg" disabled={submitting} className="w-full">
         {submitting ? (
-          "Sending..."
+          messages.form.sending
         ) : (
           <>
             <Check className="h-5 w-5" aria-hidden />
-            Send
+            {messages.form.send}
           </>
         )}
       </Button>
