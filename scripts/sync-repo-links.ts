@@ -1,8 +1,8 @@
 /**
  * Downloads the commoncrawl/web-languages repo as a single tarball (avoids
  * GitHub's unauthenticated rate limit — ~7,900 individual file fetches
- * would blow through it), parses each language's per-file submission
- * categories, resolves the file to an ISO-639-3 code, and upserts the
+ * would blow through it), parses each language's per-file links,
+ * resolves the file to an ISO-639-3 code, and upserts the
  * result into Supabase's `repo_links` table.
  *
  * Without SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY set, this runs as a dry
@@ -26,7 +26,7 @@ import { createClient } from "@supabase/supabase-js";
 import languagesData from "../public/languages.json";
 import { matchLanguageByName, type LanguageRecord } from "../lib/languages";
 import { fetchAllRows } from "../lib/paging";
-import { parseLanguageMarkdown, type RepoLink } from "../lib/repo-markdown";
+import { parseLanguageMarkdown } from "../lib/repo-markdown";
 
 const TARBALL_URL =
   "https://github.com/commoncrawl/web-languages/archive/refs/heads/main.tar.gz";
@@ -40,14 +40,13 @@ type MatchableLanguage = Pick<LanguageRecord, "id" | "refName" | "altNames"> & {
 type RepoLinkRow = {
   language_id: string;
   url: string;
-  category: RepoLink["category"];
   note: string | null;
 };
 
 /** Postgres's `upsert(..., { onConflict })` aborts the whole batch with
  * "ON CONFLICT DO UPDATE command cannot affect row a second time" if two
  * rows in one call share a conflict key — which happens for real if the
- * source repo lists the same URL under two categories in one file, or two
+ * source repo lists the same URL under two sections in one file, or two
  * files resolve to the same language. Collapses to one row per
  * (language_id, url), keeping whichever occurrence was parsed first. */
 export function dedupeRepoLinkRows(rows: RepoLinkRow[]): RepoLinkRow[] {
@@ -164,7 +163,6 @@ async function main() {
           rows.push({
             language_id: match.id,
             url: link.url,
-            category: link.category,
             note: link.note,
           });
         }

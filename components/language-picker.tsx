@@ -40,10 +40,21 @@ export function LanguagePicker({
     [languages],
   );
 
+  const languagesById = useMemo(
+    () => new Map(languages.map((language) => [language.id.toLowerCase(), language])),
+    [languages],
+  );
+
   const results = useMemo(() => {
-    if (deferredQuery.trim().length === 0) return [];
-    return fuse.search(deferredQuery, { limit: MAX_RESULTS }).map((r) => r.item);
-  }, [fuse, deferredQuery]);
+    const trimmed = deferredQuery.trim();
+    if (trimmed.length === 0) return [];
+    const fuzzy = fuse.search(trimmed, { limit: MAX_RESULTS }).map((r) => r.item);
+    // An exact 3-letter ISO 639-3 code (e.g. "cym") goes first; fuzzy
+    // matching alone would bury it or never surface it.
+    const byCode = languagesById.get(trimmed.toLowerCase());
+    if (!byCode) return fuzzy;
+    return [byCode, ...fuzzy.filter((l) => l.id !== byCode.id)].slice(0, MAX_RESULTS);
+  }, [fuse, deferredQuery, languagesById]);
 
   function selectLanguage(language: LanguageRecord) {
     onSelect(language);
@@ -59,7 +70,7 @@ export function LanguagePicker({
     const trimmed = query.trim();
     if (trimmed.length === 0) return;
     const lower = trimmed.toLowerCase();
-    const exact = languages.find(
+    const exact = languagesById.get(lower) ?? languages.find(
       (language) =>
         language.refName.toLowerCase() === lower ||
         language.altNames.some((alt) => alt.toLowerCase() === lower),

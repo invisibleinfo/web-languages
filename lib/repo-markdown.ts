@@ -1,8 +1,5 @@
-import { CATEGORIES, type Category } from "./validation";
-
 export type RepoLink = {
   url: string;
-  category: Category;
   note: string | null;
 };
 
@@ -12,13 +9,15 @@ export type ParsedLanguageFile = {
   links: RepoLink[];
 };
 
-const SECTION_TO_CATEGORY: Record<string, Category> = {
-  news: "news",
-  "culture / history": "culture_history",
-  government: "government",
-  "political parties": "political_parties",
-  other: "other",
-};
+// The repo groups links under these headings; this app doesn't keep the
+// grouping, but they still mark which bullets are links.
+const LINK_SECTIONS = new Set([
+  "news",
+  "culture / history",
+  "government",
+  "political parties",
+  "other",
+]);
 
 const BULLET_LINE = /^-\s*(.*)$/;
 const URL_WITH_OPTIONAL_NOTE = /^(https?:\/\/\S+?)(?:\s+\(([^)]+)\))?\s*$/;
@@ -76,20 +75,16 @@ export function parseLanguageMarkdown(content: string): ParsedLanguageFile {
       continue;
     }
 
-    const category = SECTION_TO_CATEGORY[currentSection];
-    if (!category) continue;
+    if (!LINK_SECTIONS.has(currentSection)) continue;
 
     const urlMatch = bulletContent.match(URL_WITH_OPTIONAL_NOTE);
     if (!urlMatch) continue;
 
     links.push({
       url: urlMatch[1],
-      category,
       note: urlMatch[2] ?? null,
     });
   }
 
   return { displayName, additionalNames, links };
 }
-
-export const REPO_CATEGORIES = CATEGORIES;

@@ -20,13 +20,13 @@ npm run dev
 |---|---|
 | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase project → Project Settings → API |
 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Same page — service role key, keep server-only |
-| `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | Cloudflare dashboard → Turnstile → add a widget |
 
 ### Database
 
-Run `supabase/migrations/0001_init.sql`, then `0002_grants.sql`, against a Supabase project (SQL
-Editor, or the Supabase CLI) to create `languages`, `repo_links`,
-`submissions`, and the `public_submissions` view.
+Run `supabase/schema.sql` in the Supabase SQL Editor to create `languages`,
+`repo_links`, `submissions`, and the `public_submissions` view. It is safe to
+re-run, and also upgrades a v2 database (drops the old category, name and
+email columns).
 
 Then seed the language reference data and the known GitHub links:
 
@@ -60,13 +60,10 @@ Supabase Table Editor: filter `submissions` by `status = 'pending'`, edit
 Deployed on [Railway](https://railway.com), which auto-detects `npm run
 build` and `npm run start`.
 
-1. Add the same six variables from `.env.example` as **service variables**
+1. Add the same four variables from `.env.example` as **service variables**
    in Railway. Set them *before* the first build: `NEXT_PUBLIC_*` values are
    baked into the site at build time, and the build fails without them.
-2. Use real Cloudflare Turnstile keys (the `1x000...` keys are test keys that
-   pass everything) and add your Railway domain to the widget's allowed
-   domains.
-3. Deploy, either by connecting a GitHub repo (redeploys on every push) or
+2. Deploy, either by connecting a GitHub repo (redeploys on every push) or
    with the Railway CLI: `railway login`, `railway link`, `railway up`.
 
 Re-run `npm run sync-repo-links` periodically to refresh `repo_links`, and
