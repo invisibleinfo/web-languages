@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, Languages } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { LanguagePicker } from "@/components/language-picker";
 import { Button } from "@/components/ui/button";
 import { SubmissionForm } from "@/components/submission-form";
@@ -93,7 +93,11 @@ export default function Home() {
   const [listed, setListed] = useState<ListState>(EMPTY_LIST);
   const [recent, setRecent] = useState<ListState>(EMPTY_LIST);
   const [loadingLists, setLoadingLists] = useState(false);
-  const [thanks, setThanks] = useState<number | null>(null);
+  const [thanks, setThanks] = useState<{ added: number; skipped: number } | null>(null);
+  // The language the lists are currently for. A slow response for a
+  // language the visitor has already switched away from is dropped, so it
+  // can't overwrite the lists of the one they're looking at.
+  const activeLanguageId = useRef<string | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [languagesWithSources, setLanguagesWithSources] = useState<number | null>(null);
 
@@ -113,11 +117,13 @@ export default function Home() {
   }, []);
 
   async function loadLists(languageId: string) {
+    activeLanguageId.current = languageId;
     setLoadingLists(true);
     const [listedResult, recentResult] = await Promise.all([
       fetchList(LISTED, languageId, 0, FIRST_PAGE - 1),
       fetchList(RECENT, languageId, 0, FIRST_PAGE - 1),
     ]);
+    if (activeLanguageId.current !== languageId) return;
     setListed(listedResult);
     setRecent(recentResult);
     setLoadingLists(false);
@@ -137,6 +143,7 @@ export default function Home() {
       current.items.length,
       current.items.length + MORE_PAGE - 1,
     );
+    if (activeLanguageId.current !== languageId) return;
     set({ items: [...current.items, ...next.items], total: next.total });
   }
 
@@ -191,7 +198,10 @@ export default function Home() {
                   <Check className="mx-auto mb-3 h-10 w-10 text-verified" aria-hidden />
                   <h2 className="font-heading text-2xl font-semibold">Thank you!</h2>
                   <p className="mt-1 text-ink-soft">
-                    You shared {thanks} {thanks === 1 ? "link" : "links"} for {selected.refName}.
+                    {thanks.added > 0
+                      ? `You shared ${thanks.added} ${thanks.added === 1 ? "link" : "links"} for ${selected.refName}.`
+                      : "We already have these links."}
+                    {thanks.added > 0 && thanks.skipped > 0 && ` ${thanks.skipped} we already had.`}
                   </p>
                   <Button type="button" onClick={() => setThanks(null)} className="mt-4">
                     Add more
@@ -202,8 +212,8 @@ export default function Home() {
                   <h2 className="font-heading text-xl font-semibold">Add a website</h2>
                   <SubmissionForm
                     languageId={selected.id}
-                    onSubmitted={(count) => {
-                      setThanks(count);
+                    onSubmitted={(result) => {
+                      setThanks(result);
                       loadLists(selected.id);
                     }}
                   />

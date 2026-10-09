@@ -1,7 +1,6 @@
 -- LingoCrawlUI database schema — the only SQL file. Paste it into the
--- Supabase SQL Editor. Safe to re-run: on a fresh project it creates
--- everything; on a v2 project it drops the old category / name / email
--- columns (that data is deleted).
+-- Supabase SQL Editor of a new project. Create-only: it never drops or
+-- deletes anything, and is safe to re-run.
 --
 -- languages + repo_links are read-only reference data, written only by the
 -- seed/sync scripts via the service-role key. submissions is the staging
@@ -36,15 +35,6 @@ create table if not exists submissions (
   submitted_at timestamptz not null default now()
 );
 
--- Upgrade from v2: drop the views first (they reference the columns being dropped).
-drop view if exists public_submissions;
-drop view if exists repo_links_stats;
-alter table repo_links drop column if exists category;
-alter table submissions drop column if exists category;
-alter table submissions drop column if exists contributor_name;
-alter table submissions drop column if exists submitter_contact;
-alter table submissions add column if not exists session_id text;
-
 create index if not exists submissions_language_id_idx on submissions(language_id);
 create index if not exists submissions_status_idx on submissions(status);
 create index if not exists repo_links_language_id_idx on repo_links(language_id);
@@ -56,13 +46,13 @@ create index if not exists repo_links_language_id_idx on repo_links(language_id)
 -- The view runs as its owner (Postgres's default), which is what lets it
 -- read the RLS-locked `submissions` table for anonymous visitors. Don't
 -- "fix" this with `security_invoker = true` — it would break the view.
-create view public_submissions as
+create or replace view public_submissions as
   select language_id, url, note, submitted_at
   from submissions
   where status not in ('rejected', 'duplicate');
 
 -- Landing-page stat: one fast query instead of paging all of repo_links.
-create view repo_links_stats as
+create or replace view repo_links_stats as
   select count(distinct language_id) as languages_with_sources
   from repo_links;
 
@@ -70,15 +60,23 @@ alter table languages enable row level security;
 alter table repo_links enable row level security;
 alter table submissions enable row level security;
 
-drop policy if exists "languages are publicly readable" on languages;
-create policy "languages are publicly readable"
-  on languages for select
-  using (true);
+-- CREATE POLICY has no "if not exists", so each is guarded by a lookup.
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where tablename = 'languages' and policyname = 'languages are publicly readable'
+  ) then
+    create policy "languages are publicly readable" on languages for select using (true);
+  end if;
 
-drop policy if exists "repo_links are publicly readable" on repo_links;
-create policy "repo_links are publicly readable"
-  on repo_links for select
-  using (true);
+  if not exists (
+    select 1 from pg_policies
+    where tablename = 'repo_links' and policyname = 'repo_links are publicly readable'
+  ) then
+    create policy "repo_links are publicly readable" on repo_links for select using (true);
+  end if;
+end $$;
 
 -- No policies on `submissions`: with RLS on, anon/authenticated are denied
 -- by default. Writes go through the server-only service-role client in the

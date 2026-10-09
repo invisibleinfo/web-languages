@@ -42,7 +42,7 @@ export function SubmissionForm({
   onSubmitted,
 }: {
   languageId: string;
-  onSubmitted: (count: number) => void;
+  onSubmitted: (result: { added: number; skipped: number }) => void;
 }) {
   const [rows, setRows] = useState<Row[]>([newRow()]);
   const [honeypot, setHoneypot] = useState("");
@@ -88,8 +88,9 @@ export function SubmissionForm({
         setError("That did not work. Check the link and try again.");
         return;
       }
+      const result = (await response.json()) as { count: number; duplicates: number };
       setRows([newRow()]);
-      onSubmitted(links.length);
+      onSubmitted({ added: result.count, skipped: result.duplicates });
     } catch {
       setError("That did not work. Try again.");
     } finally {
