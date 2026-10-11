@@ -1,79 +1,94 @@
-# LingoCrawlUI
+# LingoCrawl
 
-A public contribution portal for Common Crawl's [`web-languages`](https://github.com/commoncrawl/web-languages)
-project. Lets anyone search one of ~7,900 ISO-639-3 languages and submit a
-website URL for it — no GitHub account needed. Submissions land in a
-Supabase staging table for a small trusted team to review; this app has no
-admin/reviewer UI at all.
+**[lingocrawl-production.up.railway.app](https://lingocrawl-production.up.railway.app/)**
 
-## Setup
+A website where anyone can share a website in their own language — no
+account needed. It feeds Common Crawl's
+[`web-languages`](https://github.com/commoncrawl/web-languages) project,
+which is working to cover more of the world's ~7,900 languages on the web,
+including ones that are small, regional, or easy to overlook.
+
+Many languages barely have a presence online. If you know a news site,
+government page, or community site in a language you speak, adding it
+here helps that language show up where it currently doesn't.
+
+## How to contribute
+
+1. Open the [site](https://lingocrawl-production.up.railway.app/) and
+   search for your language — by name or by its 3-letter code.
+2. Paste the link to a website that's actually written in that language,
+   with an optional note about what it is.
+3. Send it. That's it — no sign-up, no GitHub account.
+
+The site shows what's already listed for a language, and what's been
+added recently, so you can check before adding one that's already there.
+
+
+## For developers
+
+This repo is the engine behind the site above. It's a Next.js app on
+[Railway](https://railway.com) with a Supabase database; both are already
+set up and running.
 
 ```bash
 npm install
-cp .env.example .env.local   # fill in the values below
-npm run dev
+npm run dev   # local copy for trying out a code change
+              # before it's pushed — the live site itself runs on Railway
+              # and is never started this way
 ```
 
-### Environment variables (`.env.local`)
-
-| Variable | Where to get it |
-|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase project → Project Settings → API |
-| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Same page — service role key, keep server-only |
-
-### Database
-
-Run `supabase/schema.sql` in the Supabase SQL Editor to create `languages`,
-`repo_links`, `submissions`, and the views the site reads. It only creates
-and adds (never drops), so it is safe to re-run on an existing database to
-pick up new columns.
-
-### Interface languages
-
-Site text lives in `lib/i18n/messages/` — `en.ts` is the source of truth
-and each other language file must have exactly the same keys (the
-typecheck and `lib/i18n/i18n.test.ts` both enforce this). To add a
-language: add it to `LOCALES` in `lib/i18n/locales.ts`, add its messages
-file, and register it in `lib/i18n/load-messages.ts`.
-
-Then seed the language reference data and the known GitHub links:
-
-```bash
-npm run seed-languages     # writes public/languages.json + upserts `languages`
-npm run sync-repo-links    # parses web-languages repo, upserts `repo_links`
+`npm run dev` needs a `.env.local` file with four Supabase values (see
+below). 
 ```
-
-Both scripts work without Supabase credentials too — they'll fetch/parse
-and print stats without writing anything, which is useful for checking the
-parser against the live repo.
-
-## Reviewing submissions
-
-There is no review UI in this app by design. Reviewers work directly in the
-Supabase Table Editor: filter `submissions` by `status = 'pending'`, edit
-`status`/`reviewed_by`/`reviewed_at` inline, and export to CSV periodically.
-
-## Scripts
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+```
+All four are in the Supabase dashboard under Project Settings → API (the
+last two under the service role key — keep those two server-only, never
+expose them to the browser). These are the same four values already set
+as Railway's service variables for the live site.
 
 | Command | What it does |
 |---|---|
-| `npm run dev` | Local dev server |
-| `npm run build` / `npm run start` | Production build / serve |
+| `npm run dev` | Local dev server, for working on the code |
+| `npm run build` / `npm run start` | What Railway runs to serve the live site |
 | `npm run lint` | ESLint |
 | `npm run seed-languages` | Seed the `languages` table + `public/languages.json` from SIL |
 | `npm run sync-repo-links` | Sync `repo_links` from the live `web-languages` repo |
 
-## Deployment
+Both seed/sync scripts also run fine without Supabase credentials set —
+they fetch and parse but skip writing, which is useful for checking them
+against the live repo on their own.
 
-Deployed on [Railway](https://railway.com), which auto-detects `npm run
-build` and `npm run start`.
+**Database:** `supabase/schema.sql`, run in the Supabase SQL Editor,
+creates everything the site needs. It only adds, never drops, so it's
+safe to re-run any time (e.g. after pulling a change that adds a column).
 
-1. Add the same four variables from `.env.example` as **service variables**
-   in Railway. Set them *before* the first build: `NEXT_PUBLIC_*` values are
-   baked into the site at build time, and the build fails without them.
-2. Deploy, either by connecting a GitHub repo (redeploys on every push) or
-   with the Railway CLI: `railway login`, `railway link`, `railway up`.
+**Reviewing submissions:** Reviewers work directly in the Supabase Table Editor — filter `submissions` by `status = 'pending'`, edit `status` inline.
 
-Re-run `npm run sync-repo-links` periodically to refresh `repo_links`, and
-open the Supabase project now and then so the free tier doesn't pause from
-inactivity.
+**Interface languages:** site content lives in `lib/i18n/messages/`, one file
+per language, with `en.ts` as the source. To add a language, add
+it to `lib/i18n/locales.ts`, add its content file, and register it in
+`lib/i18n/load-messages.ts` — the typecheck will catch any missing text.
+To change existing site content, just edit that language's file.
+
+**Keeping the data fresh — nothing runs this automatically** (no GitHub
+Actions, no cron, by choice — no secrets go on GitHub), **so run these by
+hand:**
+
+```bash
+npm run sync-repo-links   # monthly-ish — pulls in links added upstream
+npm run seed-languages    # only if SIL's own language list changes (rare)
+```
+
+Also worth opening the Supabase dashboard every few weeks — the free tier
+pauses a project after a period of inactivity. More detail in
+[`docs/maintenance.md`](docs/maintenance.md).
+
+**Deploying:** Railway auto-builds on push to the connected branch, using
+the same four variables above as its service variables, set *before* the
+first build (the `NEXT_PUBLIC_*` ones are baked in at build time). Open
+the Supabase project now and then too, so the free tier doesn't pause
+from inactivity.
