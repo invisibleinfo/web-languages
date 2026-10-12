@@ -23,10 +23,10 @@ function newRow(): Row {
  * when storage is blocked. */
 function getSessionId(): string {
   try {
-    const existing = localStorage.getItem("lingocrawl-session");
+    const existing = localStorage.getItem("web-languages-session");
     if (existing) return existing;
     const created = crypto.randomUUID();
-    localStorage.setItem("lingocrawl-session", created);
+    localStorage.setItem("web-languages-session", created);
     return created;
   } catch {
     return crypto.randomUUID();

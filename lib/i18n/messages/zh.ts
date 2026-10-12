@@ -2,7 +2,7 @@ import type { Messages } from "./en";
 
 const zh: Messages = {
   meta: {
-    title: "LingoCrawl — 分享你的语言的网站",
+    title: "web-languages — 分享你的语言的网站",
     description: "分享一个使用你的语言的网站，帮助 Common Crawl 的 web-languages 项目——无需 GitHub 账号。",
   },
   header: {
@@ -10,9 +10,9 @@ const zh: Messages = {
   },
   home: {
     title: "分享一个用你的语言写的网站",
-    subtitle: "一起为每种语言绘制网络地图——找到你的语言，添加一个你信任的网站。",
-    statsTotal: "我们已收录 {total} 种语言。",
-    statsWithSources: "我们已收录 {total} 种语言，其中 {count} 种已有来源。",
+    subtitle: "帮助互联网展现人类使用的每一种语言。找到你的语言，添加一个你信任的网站。",
+    statsTotal: "我们记录了人类使用的 {total} 种语言。",
+    statsWithSources: "我们记录了人类使用的 {total} 种语言，其中只有 {percent}% 拥有网络来源。",
   },
   picker: {
     loading: "正在加载语言……",

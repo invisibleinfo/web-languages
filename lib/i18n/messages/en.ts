@@ -5,7 +5,7 @@ import type { PluralText } from "../format";
 // Placeholders like {count} are filled in by lib/i18n/format.ts.
 const en = {
   meta: {
-    title: "LingoCrawl — Share a website for your language",
+    title: "web-languages — Share a website for your language",
     description:
       "Help Common Crawl's web-languages project by sharing a website in your language — no GitHub account needed.",
   },
@@ -14,9 +14,9 @@ const en = {
   },
   home: {
     title: "Share a website in your language",
-    subtitle: "Help build a map of the web for every language — find yours and add a site you trust.",
-    statsTotal: "We're already tracking {total} languages.",
-    statsWithSources: "We're already tracking {total} languages — {count} of them already have a source.",
+    subtitle: "Help the web reflect every language humans speak. Find yours and add a site you trust.",
+    statsTotal: "We track {total} languages spoken by humans.",
+    statsWithSources: "We track {total} languages spoken by humans, only {percent}% of them have a web source.",
   },
   picker: {
     loading: "Loading languages...",

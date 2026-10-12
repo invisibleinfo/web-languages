@@ -4,7 +4,7 @@ import type { Messages } from "./en";
 // never has to agree with the count (Russian has three plural forms).
 const ru: Messages = {
   meta: {
-    title: "LingoCrawl — Поделитесь сайтом на вашем языке",
+    title: "web-languages — Поделитесь сайтом на вашем языке",
     description:
       "Помогите проекту web-languages от Common Crawl: поделитесь сайтом на вашем языке. Аккаунт GitHub не нужен.",
   },
@@ -13,9 +13,9 @@ const ru: Messages = {
   },
   home: {
     title: "Поделитесь сайтом на вашем языке",
-    subtitle: "Помогите составить карту интернета для каждого языка — найдите свой и добавьте сайт, которому доверяете.",
-    statsTotal: "Языков в нашем списке: {total}.",
-    statsWithSources: "Языков в нашем списке: {total}, из них с источниками: {count}.",
+    subtitle: "Помогите вебу отражать каждый язык, на котором говорят люди. Найдите свой язык и добавьте сайт, которому доверяете.",
+    statsTotal: "Языков, на которых говорят люди: {total}.",
+    statsWithSources: "Языков, на которых говорят люди: {total}. Веб-источник есть лишь у {percent}% из них.",
   },
   picker: {
     loading: "Загрузка языков...",

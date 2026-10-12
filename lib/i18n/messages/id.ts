@@ -2,7 +2,7 @@ import type { Messages } from "./en";
 
 const id: Messages = {
   meta: {
-    title: "LingoCrawl — Bagikan situs web dalam bahasamu",
+    title: "web-languages — Bagikan situs web dalam bahasamu",
     description:
       "Bantu proyek web-languages dari Common Crawl dengan membagikan situs web dalam bahasamu — tanpa akun GitHub.",
   },
@@ -11,9 +11,9 @@ const id: Messages = {
   },
   home: {
     title: "Bagikan situs web dalam bahasamu",
-    subtitle: "Bantu membuat peta web untuk setiap bahasa — cari bahasamu dan tambahkan situs yang kamu percaya.",
-    statsTotal: "Kami sudah mencatat {total} bahasa.",
-    statsWithSources: "Kami sudah mencatat {total} bahasa — {count} di antaranya sudah punya sumber.",
+    subtitle: "Bantu agar web mencerminkan setiap bahasa yang digunakan manusia. Cari bahasamu dan tambahkan situs yang kamu percaya.",
+    statsTotal: "Kami mencatat {total} bahasa yang digunakan manusia.",
+    statsWithSources: "Kami mencatat {total} bahasa yang digunakan manusia, dan hanya {percent}% di antaranya yang punya sumber di web.",
   },
   picker: {
     loading: "Memuat bahasa...",

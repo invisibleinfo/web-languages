@@ -1,4 +1,4 @@
--- LingoCrawlUI database schema — the only SQL file. Paste it into the
+-- web-languages database schema — the only SQL file. Paste it into the
 -- Supabase SQL Editor of a new project. Create-only: it never drops or
 -- deletes anything, and is safe to re-run.
 --
