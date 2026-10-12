@@ -2,7 +2,7 @@ import type { Messages } from "./en";
 
 const pt: Messages = {
   meta: {
-    title: "LingoCrawl — Compartilhe um site no seu idioma",
+    title: "web-languages — Compartilhe um site no seu idioma",
     description:
       "Ajude o projeto web-languages da Common Crawl compartilhando um site no seu idioma — sem precisar de conta no GitHub.",
   },
@@ -11,9 +11,9 @@ const pt: Messages = {
   },
   home: {
     title: "Compartilhe um site no seu idioma",
-    subtitle: "Ajude a criar um mapa da web para cada idioma — encontre o seu e adicione um site em que você confia.",
-    statsTotal: "Já acompanhamos {total} idiomas.",
-    statsWithSources: "Já acompanhamos {total} idiomas — {count} deles já têm uma fonte.",
+    subtitle: "Ajude a web a refletir cada idioma falado por pessoas. Encontre o seu e adicione um site em que você confia.",
+    statsTotal: "Acompanhamos {total} idiomas falados por pessoas.",
+    statsWithSources: "Acompanhamos {total} idiomas falados por pessoas, e apenas {percent}% deles têm uma fonte na web.",
   },
   picker: {
     loading: "Carregando idiomas...",

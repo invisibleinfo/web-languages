@@ -67,6 +67,9 @@ function StatStrip({
     ) : (
       number(totalLanguages)
     );
+  const skeleton = (
+    <span className="inline-block h-4 w-10 animate-pulse bg-border align-middle" aria-hidden />
+  );
 
   // Once the source count resolved to "unavailable", show only the total.
   if (!statsLoading && languagesWithSources === null) {
@@ -76,16 +79,15 @@ function StatStrip({
       </p>
     );
   }
+
+  const percentReady = !statsLoading && totalLanguages !== null && totalLanguages > 0;
+  const percent = percentReady
+    ? number(Math.round((languagesWithSources! / totalLanguages!) * 100))
+    : skeleton;
+
   return (
     <p className="text-center text-lg text-ink-soft">
-      {formatNodes(messages.home.statsWithSources, {
-        total,
-        count: statsLoading ? (
-          <span className="inline-block h-4 w-10 animate-pulse bg-border align-middle" aria-hidden />
-        ) : (
-          number(languagesWithSources!)
-        ),
-      })}
+      {formatNodes(messages.home.statsWithSources, { total, percent })}
     </p>
   );
 }
@@ -96,7 +98,7 @@ function SiteHeader() {
       <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3 sm:px-5">
         <div className="flex min-w-0 items-center gap-2">
           <Languages className="h-5 w-5" aria-hidden />
-          <span className="font-heading text-lg font-semibold">LingoCrawl</span>
+          <span className="font-heading text-lg font-semibold">web-languages</span>
         </div>
         <UiLanguageSelect />
       </div>

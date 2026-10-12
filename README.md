@@ -1,6 +1,6 @@
-# LingoCrawl
+# web-languages
 
-**[lingocrawl-production.up.railway.app](https://lingocrawl-production.up.railway.app/)**
+**[web-languages.invisible.info](https://web-languages.invisible.info/)**
 
 A website where anyone can share a website in their own language — no
 account needed. It feeds Common Crawl's
@@ -14,7 +14,7 @@ here helps that language show up where it currently doesn't.
 
 ## How to contribute
 
-1. Open the [site](https://lingocrawl-production.up.railway.app/) and
+1. Open the [site](https://web-languages.invisible.info/) and
    search for your language — by name or by its 3-letter code.
 2. Paste the link to a website that's actually written in that language,
    with an optional note about what it is.
@@ -85,7 +85,7 @@ npm run seed-languages    # only if SIL's own language list changes (rare)
 
 Also worth opening the Supabase dashboard every few weeks — the free tier
 pauses a project after a period of inactivity. More detail in
-[`docs/maintenance.md`](docs/maintenance.md).
+[`docs/notes.md`](docs/notes.md).
 
 **Deploying:** Railway auto-builds on push to the connected branch, using
 the same four variables above as its service variables, set *before* the

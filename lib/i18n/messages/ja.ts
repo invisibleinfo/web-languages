@@ -2,7 +2,7 @@ import type { Messages } from "./en";
 
 const ja: Messages = {
   meta: {
-    title: "LingoCrawl — あなたの言語のウェブサイトを共有",
+    title: "web-languages — あなたの言語のウェブサイトを共有",
     description:
       "あなたの言語のウェブサイトを共有して、Common Crawl の web-languages プロジェクトに協力しましょう。GitHub アカウントは不要です。",
   },
@@ -11,9 +11,9 @@ const ja: Messages = {
   },
   home: {
     title: "あなたの言語のウェブサイトを共有しよう",
-    subtitle: "すべての言語のウェブ地図づくりに協力してください。あなたの言語を探して、信頼できるサイトを追加しましょう。",
-    statsTotal: "現在 {total} の言語を記録しています。",
-    statsWithSources: "現在 {total} の言語を記録しており、そのうち {count} の言語にはすでに情報源があります。",
+    subtitle: "人が話すすべての言語がウェブに反映されるように力を貸してください。あなたの言語を探して、信頼できるサイトを追加しましょう。",
+    statsTotal: "人が話す言語を {total} 件記録しています。",
+    statsWithSources: "人が話す言語を {total} 件記録しており、そのうちウェブ上の情報源があるのはわずか {percent}% です。",
   },
   picker: {
     loading: "言語を読み込み中…",
