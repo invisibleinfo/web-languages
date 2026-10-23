@@ -50,7 +50,6 @@ const es: Messages = {
   },
   lists: {
     listed: "Ya en la lista",
-    recent: "Añadidos hace poco",
     none: "Todavía ninguno",
     loading: "Cargando...",
     more: "Ver más",

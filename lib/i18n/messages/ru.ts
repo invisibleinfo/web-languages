@@ -52,7 +52,6 @@ const ru: Messages = {
   },
   lists: {
     listed: "Уже в списке",
-    recent: "Недавно добавлены",
     none: "Пока нет",
     loading: "Загрузка...",
     more: "Показать ещё",

@@ -20,53 +20,66 @@ here helps that language show up where it currently doesn't.
    with an optional note about what it is.
 3. Send it. That's it — no sign-up, no GitHub account.
 
-The site shows what's already listed for a language, and what's been
-added recently, so you can check before adding one that's already there.
+The site shows what's already listed for a language, so you can check
+before adding one that's already there. New links are reviewed by a person
+before they are added.
 
 
 ## For developers
 
 This repo is the engine behind the site above. It's a Next.js app on
-[Railway](https://railway.com) with a Supabase database; both are already
-set up and running.
+[Railway](https://railway.com). There is no database: the list of known
+links is built from the upstream repo on every deploy, and submissions
+are GitHub issues that end up in a CSV file in this repo.
 
 ```bash
 npm install
-npm run dev   # local copy for trying out a code change
-              # before it's pushed — the live site itself runs on Railway
-              # and is never started this way
+npm run sync-repo-links   # once, to create the link files the site reads
+npm run dev               # local copy for trying out a code change
+                          # before it's pushed — the live site itself runs
+                          # on Railway and is never started this way
 ```
 
-`npm run dev` needs a `.env.local` file with four Supabase values (see
-below). 
+Submitting links needs a `.env.local` file (gitignored) with two values:
+
 ```
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_URL=
-SUPABASE_SERVICE_ROLE_KEY=
+GITHUB_TOKEN=
+GITHUB_REPO=
 ```
-All four are in the Supabase dashboard under Project Settings → API (the
-last two under the service role key — keep those two server-only, never
-expose them to the browser). These are the same four values already set
-as Railway's service variables for the live site.
+
+`GITHUB_REPO` is the repo that receives submission issues, as `owner/name`.
+`GITHUB_TOKEN` is a fine-grained personal access token limited to that one
+repo, with **Issues: read and write** — keep it server-only and never
+commit it. Set the same two values as Railway's service variables for the
+live site. Without them the site still works, but sending a link fails.
 
 | Command | What it does |
 |---|---|
 | `npm run dev` | Local dev server, for working on the code |
 | `npm run build` / `npm run start` | What Railway runs to serve the live site |
 | `npm run lint` | ESLint |
-| `npm run seed-languages` | Seed the `languages` table + `public/languages.json` from SIL |
-| `npm run sync-repo-links` | Sync `repo_links` from the live `web-languages` repo |
+| `npm test` | Unit tests |
+| `npm run seed-languages` | Rebuild `public/languages.json` from SIL's language list |
+| `npm run sync-repo-links` | Rebuild `public/repo-links/` and `public/stats.json` from the live `web-languages` repo |
 
-Both seed/sync scripts also run fine without Supabase credentials set —
-they fetch and parse but skip writing, which is useful for checking them
-against the live repo on their own.
+**How submissions flow:**
 
-**Database:** `supabase/schema.sql`, run in the Supabase SQL Editor,
-creates everything the site needs. It only adds, never drops, so it's
-safe to re-run any time (e.g. after pulling a change that adds a column).
+1. A visitor sends links. The site opens **one issue** in `GITHUB_REPO`,
+   labelled `submission`, `lang:<code>` and `ui:<interface language>`.
+   Links already listed upstream or already approved are dropped first.
+2. A maintainer reviews the issue. To drop a bad link, edit the issue and
+   delete its line from the list.
+3. **Accept:** add the `approved` label. The workflow in
+   `.github/workflows/approve-submission.yml` appends the links still in the
+   issue to `data/submissions.csv`, commits it, and closes the issue.
+   Railway redeploys on that commit.
+   **Reject:** close the issue as "not planned". The links are logged in
+   `data/rejected.csv`.
 
-**Reviewing submissions:** Reviewers work directly in the Supabase Table Editor — filter `submissions` by `status = 'pending'`, edit `status` inline.
+Both CSV files record the visitor's interface language (`ui_locale`) and the
+issue number. The workflow uses only GitHub's built-in per-run token — no
+secret of ours is stored on GitHub — and ignores the `approved` label from
+anyone without write access.
 
 **Interface languages:** site content lives in `lib/i18n/messages/`, one file
 per language, with `en.ts` as the source. To add a language, add
@@ -74,21 +87,12 @@ it to `lib/i18n/locales.ts`, add its content file, and register it in
 `lib/i18n/load-messages.ts` — the typecheck will catch any missing text.
 To change existing site content, just edit that language's file.
 
-**Keeping the data fresh — nothing runs this automatically** (no GitHub
-Actions, no cron, by choice — no secrets go on GitHub), **so run these by
-hand:**
+**Keeping the data fresh:** `npm run build` runs `sync-repo-links` first, so
+every deploy pulls in the links added upstream. To pick up new upstream
+links without a code change, redeploy on Railway. Run `npm run seed-languages`
+only if SIL's own language list changes (rare).
 
-```bash
-npm run sync-repo-links   # monthly-ish — pulls in links added upstream
-npm run seed-languages    # only if SIL's own language list changes (rare)
-```
-
-Also worth opening the Supabase dashboard every few weeks — the free tier
-pauses a project after a period of inactivity. More detail in
-[`docs/notes.md`](docs/notes.md).
-
-**Deploying:** Railway auto-builds on push to the connected branch, using
-the same four variables above as its service variables, set *before* the
-first build (the `NEXT_PUBLIC_*` ones are baked in at build time). Open
-the Supabase project now and then too, so the free tier doesn't pause
-from inactivity.
+**Deploying:** Railway auto-builds on push to the connected branch, with
+`GITHUB_TOKEN` and `GITHUB_REPO` set as service variables before the first
+build. The build fails if the upstream download fails, rather than shipping
+a site with empty lists.

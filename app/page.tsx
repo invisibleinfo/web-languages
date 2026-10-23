@@ -10,7 +10,6 @@ import { UiLanguageSelect } from "@/components/ui-language-select";
 import { UrlList, type UrlListItem } from "@/components/url-list";
 import { formatNodes, plural } from "@/lib/i18n/format";
 import { loadLanguages, type LanguageRecord } from "@/lib/languages";
-import { supabase } from "@/lib/supabase/client";
 
 const FIRST_PAGE = 3;
 const MORE_PAGE = 20;
@@ -18,34 +17,37 @@ const MORE_PAGE = 20;
 type ListState = { items: UrlListItem[]; total: number; failed?: boolean };
 const EMPTY_LIST: ListState = { items: [], total: 0 };
 
-type ListSource = {
-  table: "repo_links" | "public_submissions";
-  orderBy: string;
-  ascending: boolean;
-};
-const LISTED: ListSource = { table: "repo_links", orderBy: "url", ascending: true };
-const RECENT: ListSource = { table: "public_submissions", orderBy: "submitted_at", ascending: false };
+// Each language's known links are one small static file (written by
+// scripts/sync-repo-links.ts), fetched once and paged through in memory.
+const linkFiles = new Map<string, Promise<UrlListItem[]>>();
 
-async function fetchList(
-  source: ListSource,
-  languageId: string,
-  from: number,
-  to: number,
-): Promise<ListState> {
-  const { data, count, error } = await supabase
-    .from(source.table)
-    .select("url, note", { count: "exact" })
-    .eq("language_id", languageId)
-    .order(source.orderBy, { ascending: source.ascending })
-    .range(from, to);
-  // A failed read must not look like "None yet".
-  if (error) return { items: [], total: 0, failed: true };
-  return { items: (data as UrlListItem[]) ?? [], total: count ?? 0 };
+function loadLinkFile(languageId: string): Promise<UrlListItem[]> {
+  let file = linkFiles.get(languageId);
+  if (!file) {
+    file = fetch(`/repo-links/${languageId}.json`).then((response) => {
+      // No file means the upstream repo has no links for this language yet.
+      if (response.status === 404) return [];
+      if (!response.ok) throw new Error(`repo-links ${response.status}`);
+      return response.json() as Promise<UrlListItem[]>;
+    });
+    linkFiles.set(languageId, file);
+    file.catch(() => linkFiles.delete(languageId));
+  }
+  return file;
+}
+
+async function fetchList(languageId: string, from: number, to: number): Promise<ListState> {
+  try {
+    const all = await loadLinkFile(languageId);
+    return { items: all.slice(from, to + 1), total: all.length };
+  } catch {
+    // A failed read must not look like "None yet".
+    return { items: [], total: 0, failed: true };
+  }
 }
 
 // A stat that isn't resolved yet shows a skeleton; one that resolved to
-// "unavailable" (the backing view doesn't exist until a migration runs)
-// disappears rather than ever showing a permanent dash.
+// "unavailable" (the stats file is missing) disappears rather than ever showing a permanent dash.
 function StatStrip({
   totalLanguages,
   languagesWithSources,
@@ -114,7 +116,6 @@ export default function Home() {
   const [languagesFailed, setLanguagesFailed] = useState(false);
   const [selected, setSelected] = useState<LanguageRecord | null>(null);
   const [listed, setListed] = useState<ListState>(EMPTY_LIST);
-  const [recent, setRecent] = useState<ListState>(EMPTY_LIST);
   const [loadingLists, setLoadingLists] = useState(false);
   const [thanks, setThanks] = useState<{ added: number; skipped: number } | null>(null);
   // The language the lists are currently for. A slow response for a
@@ -131,39 +132,28 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    supabase
-      .from("repo_links_stats")
-      .select("languages_with_sources")
-      .single()
-      .then(({ data }) => {
-        setLanguagesWithSources(data?.languages_with_sources ?? null);
-        setStatsLoading(false);
-      });
+    // A missing stats file just hides the percentage, never shows a dash.
+    fetch("/stats.json")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { languagesWithSources?: number } | null) =>
+        setLanguagesWithSources(data?.languagesWithSources ?? null),
+      )
+      .catch(() => setLanguagesWithSources(null))
+      .finally(() => setStatsLoading(false));
   }, []);
 
-  async function loadLists(languageId: string) {
+  async function loadList(languageId: string) {
     activeLanguageId.current = languageId;
     setLoadingLists(true);
-    const [listedResult, recentResult] = await Promise.all([
-      fetchList(LISTED, languageId, 0, FIRST_PAGE - 1),
-      fetchList(RECENT, languageId, 0, FIRST_PAGE - 1),
-    ]);
+    const result = await fetchList(languageId, 0, FIRST_PAGE - 1);
     if (activeLanguageId.current !== languageId) return;
-    setListed(listedResult);
-    setRecent(recentResult);
+    setListed(result);
     setLoadingLists(false);
   }
 
-  // Appends the next page. Uses the current length as the offset, so a
-  // list that grew since it loaded can at worst repeat an item.
-  async function loadMore(
-    source: ListSource,
-    languageId: string,
-    current: ListState,
-    set: (next: ListState) => void,
-  ) {
+  // Appends the next page, using the current length as the offset.
+  async function loadMore(languageId: string, current: ListState) {
     const next = await fetchList(
-      source,
       languageId,
       current.items.length,
       current.items.length + MORE_PAGE - 1,
@@ -171,13 +161,13 @@ export default function Home() {
     if (activeLanguageId.current !== languageId) return;
     // Keep what's already shown if the next page failed to load.
     if (next.failed) return;
-    set({ items: [...current.items, ...next.items], total: next.total });
+    setListed({ items: [...current.items, ...next.items], total: next.total });
   }
 
   function handleSelectLanguage(language: LanguageRecord) {
     setSelected(language);
     setThanks(null);
-    loadLists(language.id);
+    loadList(language.id);
   }
 
   return (
@@ -244,10 +234,7 @@ export default function Home() {
                   <h2 className="font-heading text-xl font-semibold">{messages.form.heading}</h2>
                   <SubmissionForm
                     languageId={selected.id}
-                    onSubmitted={(result) => {
-                      setThanks(result);
-                      loadLists(selected.id);
-                    }}
+                    onSubmitted={setThanks}
                   />
                 </section>
               )}
@@ -255,22 +242,13 @@ export default function Home() {
               {loadingLists ? (
                 <p className="text-ink-soft">{messages.lists.loading}</p>
               ) : (
-                <>
-                  <UrlList
-                    heading={messages.lists.listed}
-                    items={listed.items}
-                    total={listed.total}
-                    failed={listed.failed}
-                    onMore={() => loadMore(LISTED, selected.id, listed, setListed)}
-                  />
-                  <UrlList
-                    heading={messages.lists.recent}
-                    items={recent.items}
-                    total={recent.total}
-                    failed={recent.failed}
-                    onMore={() => loadMore(RECENT, selected.id, recent, setRecent)}
-                  />
-                </>
+                <UrlList
+                  heading={messages.lists.listed}
+                  items={listed.items}
+                  total={listed.total}
+                  failed={listed.failed}
+                  onMore={() => loadMore(selected.id, listed)}
+                />
               )}
             </div>
           </>

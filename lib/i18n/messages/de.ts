@@ -51,7 +51,6 @@ const de: Messages = {
   },
   lists: {
     listed: "Bereits gelistet",
-    recent: "Neu hinzugefügt",
     none: "Noch keine",
     loading: "Wird geladen...",
     more: "Mehr anzeigen",

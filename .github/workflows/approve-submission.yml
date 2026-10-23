@@ -1,0 +1,98 @@
+name: Process submission
+
+# A maintainer adds the `approved` label to accept a submission issue, or
+# closes it as "not planned" to reject it. Either way the links are recorded
+# in a CSV in this repo. Only the built-in per-run token is used; no secret
+# is stored for this workflow.
+on:
+  issues:
+    types: [labeled, closed]
+
+permissions:
+  contents: write
+  issues: write
+
+# One run at a time, so two decisions never race to push the same file.
+concurrency:
+  group: process-submission
+  cancel-in-progress: false
+
+jobs:
+  approve:
+    if: github.event.action == 'labeled' && github.event.label.name == 'approved'
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      SENDER: ${{ github.event.sender.login }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      RESULT_FILE: ${{ runner.temp }}/approval-result.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Add the approved links to data/submissions.csv
+        run: npx tsx scripts/approve-issue.ts
+        env:
+          MODE: approve
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/submissions.csv
+          if git diff --cached --quiet; then
+            echo "No new links to commit."
+            exit 0
+          fi
+          git commit -m "Approve submission #${ISSUE_NUMBER}"
+          for attempt in 1 2 3; do
+            git push origin "HEAD:${DEFAULT_BRANCH}" && exit 0
+            git pull --rebase origin "${DEFAULT_BRANCH}"
+          done
+          echo "Could not push after 3 attempts."
+          exit 1
+      - name: Comment on and close the issue
+        run: npx tsx scripts/approve-issue.ts
+        env:
+          MODE: finish
+
+  reject:
+    if: >-
+      github.event.action == 'closed' &&
+      github.event.issue.state_reason == 'not_planned' &&
+      contains(github.event.issue.labels.*.name, 'submission')
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Record the rejected links in data/rejected.csv
+        run: npx tsx scripts/approve-issue.ts
+        env:
+          MODE: reject
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/rejected.csv
+          if git diff --cached --quiet; then
+            echo "Nothing to commit."
+            exit 0
+          fi
+          git commit -m "Record rejected submission #${ISSUE_NUMBER}"
+          for attempt in 1 2 3; do
+            git push origin "HEAD:${DEFAULT_BRANCH}" && exit 0
+            git pull --rebase origin "${DEFAULT_BRANCH}"
+          done
+          echo "Could not push after 3 attempts."
+          exit 1

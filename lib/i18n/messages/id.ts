@@ -50,7 +50,6 @@ const id: Messages = {
   },
   lists: {
     listed: "Sudah terdaftar",
-    recent: "Baru ditambahkan",
     none: "Belum ada",
     loading: "Memuat...",
     more: "Lihat lebih banyak",

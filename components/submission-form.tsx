@@ -18,21 +18,6 @@ function newRow(): Row {
   return { key: crypto.randomUUID(), url: "", note: "" };
 }
 
-/** A random id kept in this browser, so the team can tell which
- * submissions came from the same visitor. Falls back to a throwaway id
- * when storage is blocked. */
-function getSessionId(): string {
-  try {
-    const existing = localStorage.getItem("web-languages-session");
-    if (existing) return existing;
-    const created = crypto.randomUUID();
-    localStorage.setItem("web-languages-session", created);
-    return created;
-  } catch {
-    return crypto.randomUUID();
-  }
-}
-
 export function SubmissionForm({
   languageId,
   onSubmitted,
@@ -42,12 +27,10 @@ export function SubmissionForm({
 }) {
   const { locale, messages } = useI18n();
   const [rows, setRows] = useState<Row[]>([newRow()]);
-  const [honeypot, setHoneypot] = useState("");
   // Stored as a key, not text, so the message follows a language switch.
   const [error, setError] = useState<FormError | null>(null);
   const [invalidKeys, setInvalidKeys] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
-  const honeypotId = useId();
   const fieldId = useId();
 
   function updateRow(key: string, patch: Partial<Row>) {
@@ -82,13 +65,7 @@ export function SubmissionForm({
       const response = await fetch("/api/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          languageId,
-          links,
-          sessionId: getSessionId(),
-          uiLocale: locale,
-          honeypot,
-        }),
+        body: JSON.stringify({ languageId, links, uiLocale: locale }),
       });
 
       if (!response.ok) {
@@ -175,20 +152,6 @@ export function SubmissionForm({
       >
         {messages.form.addAnother}
       </Button>
-
-      {/* Honeypot: invisible to people, tempting to bots. Any fill-in
-          means the request is treated as spam server-side. */}
-      <div className="absolute -left-[9999px]" aria-hidden="true">
-        <label htmlFor={honeypotId}>Leave this field empty</label>
-        <input
-          id={honeypotId}
-          type="text"
-          tabIndex={-1}
-          autoComplete="off"
-          value={honeypot}
-          onChange={(e) => setHoneypot(e.target.value)}
-        />
-      </div>
 
       {error && (
         <p

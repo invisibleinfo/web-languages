@@ -46,9 +46,8 @@ type NameMatchable = Pick<LanguageRecord, "id" | "refName" | "altNames">;
  * name or alternate names. Used by the repo-links sync to resolve a
  * markdown file's language name to an ISO code — deliberately exact rather
  * than fuzzy, since a sync mismatch would silently misfile submissions.
- * Generic over any record with at least id/refName/altNames so the sync
- * script's Supabase-shaped rows (which also carry a cached repo_file_slug)
- * don't need converting to a full LanguageRecord just to match. */
+ * Generic over any record with at least id/refName/altNames, so callers can
+ * pass richer records without converting them to a full LanguageRecord. */
 export function matchLanguageByName<T extends NameMatchable>(
   name: string,
   records: T[],
