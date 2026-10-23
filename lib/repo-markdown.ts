@@ -5,6 +5,8 @@ export type RepoLink = {
 
 export type ParsedLanguageFile = {
   displayName: string | null;
+  /** The ISO-639-3 code the file states about itself, lowercased. */
+  isoCode: string | null;
   additionalNames: string[];
   links: RepoLink[];
 };
@@ -20,6 +22,7 @@ const LINK_SECTIONS = new Set([
 ]);
 
 const BULLET_LINE = /^-\s*(.*)$/;
+const ISO_CODE_LINE = /^-\s*ISO-639-3 code:\s*([a-z]{3})\s*$/i;
 const URL_WITH_OPTIONAL_NOTE = /^(https?:\/\/\S+?)(?:\s+\(([^)]+)\))?\s*$/;
 // A standalone "Title Case:" line is a section heading. Deliberately loose
 // (any short line of letters/spaces/slash/parens ending in a colon) rather
@@ -43,6 +46,7 @@ export function parseLanguageMarkdown(content: string): ParsedLanguageFile {
   const lines = content.split(/\r?\n/);
 
   let displayName: string | null = null;
+  let isoCode: string | null = null;
   const additionalNames: string[] = [];
   const links: RepoLink[] = [];
   let currentSection: string | null = null;
@@ -62,6 +66,12 @@ export function parseLanguageMarkdown(content: string): ParsedLanguageFile {
     const heading = normalizeHeading(line);
     if (heading !== null) {
       currentSection = heading;
+      continue;
+    }
+
+    const isoMatch = line.match(ISO_CODE_LINE);
+    if (isoMatch) {
+      isoCode ??= isoMatch[1].toLowerCase();
       continue;
     }
 
@@ -86,5 +96,5 @@ export function parseLanguageMarkdown(content: string): ParsedLanguageFile {
     });
   }
 
-  return { displayName, additionalNames, links };
+  return { displayName, isoCode, additionalNames, links };
 }

@@ -1,8 +1,11 @@
 export type LanguageType = "living" | "extinct" | "historical" | "constructed" | "special";
 
 export type LanguageRecord = {
+  /** ISO-639-3 code. */
   id: string;
+  /** The name the web-languages repo gives the language; what the site shows. */
   refName: string;
+  /** Other names for it, searchable but not shown as the title. */
   altNames: string[];
   languageType: LanguageType;
 };
@@ -10,16 +13,16 @@ export type LanguageRecord = {
 let cache: LanguageRecord[] | null = null;
 let inflight: Promise<LanguageRecord[]> | null = null;
 
-/** Fetches the full ISO-639-3 dataset (seeded once by
- * scripts/seed-languages.ts into public/languages.json) as a plain static
- * asset — not a module import — so it's a separately cacheable network
+/** Fetches the language list (built from the web-languages repo by
+ * scripts/sync-repo-links.ts into public/language-list.json) as a plain
+ * static asset — not a module import — so it's a separately cacheable network
  * request that doesn't inflate the client JS bundle or gate hydration on a
  * ~0.5MB JSON parse. Cached in memory after the first successful call;
  * concurrent callers before that share one in-flight request. */
 export function loadLanguages(): Promise<LanguageRecord[]> {
   if (cache) return Promise.resolve(cache);
   if (!inflight) {
-    inflight = fetch("/languages.json")
+    inflight = fetch("/language-list.json")
       .then((response) => response.json() as Promise<LanguageRecord[]>)
       .then((data) => {
         cache = data;
@@ -38,25 +41,4 @@ export function loadLanguages(): Promise<LanguageRecord[]> {
 export function __resetLanguagesCacheForTests(): void {
   cache = null;
   inflight = null;
-}
-
-type NameMatchable = Pick<LanguageRecord, "id" | "refName" | "altNames">;
-
-/** Exact (case-insensitive, trimmed) match against a language's reference
- * name or alternate names. Used by the repo-links sync to resolve a
- * markdown file's language name to an ISO code — deliberately exact rather
- * than fuzzy, since a sync mismatch would silently misfile submissions.
- * Generic over any record with at least id/refName/altNames, so callers can
- * pass richer records without converting them to a full LanguageRecord. */
-export function matchLanguageByName<T extends NameMatchable>(
-  name: string,
-  records: T[],
-): T | undefined {
-  const needle = name.trim().toLowerCase();
-  if (!needle) return undefined;
-  return records.find(
-    (record) =>
-      record.refName.toLowerCase() === needle ||
-      record.altNames.some((alt) => alt.toLowerCase() === needle),
-  );
 }

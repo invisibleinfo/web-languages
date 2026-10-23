@@ -1,63 +1,31 @@
 /**
  * Downloads the commoncrawl/web-languages repo as a single tarball (avoids
  * GitHub's unauthenticated rate limit — ~7,900 individual file fetches
- * would blow through it), parses each language's per-file links,
- * resolves the file to an ISO-639-3 code, and writes the result as static
- * files the site serves:
+ * would blow through it), reads every per-language file, and writes the
+ * static files the site serves:
  *
+ *   public/language-list.json           every language: code, name, other names, category
  *   public/repo-links/<iso-code>.json   [{ url, note }], sorted by url
  *   public/stats.json                   { languagesWithSources }
  *
- * Runs automatically before `npm run build` (see the `prebuild` script), so
- * every deploy picks up the latest upstream links. The output is
- * gitignored; run it once by hand for local development.
+ * The upstream repo is the only source: each file names its language and
+ * states its own ISO-639-3 code. Runs automatically before `npm run build`
+ * (see the `prebuild` script), so every deploy picks up what changed
+ * upstream. The output is gitignored; run it once by hand for local
+ * development.
  *
  *   npm run sync-repo-links
  */
 import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
 import * as tar from "tar";
-import languagesData from "../public/languages.json";
-import { matchLanguageByName, type LanguageRecord } from "../lib/languages";
-import { parseLanguageMarkdown } from "../lib/repo-markdown";
+import { buildLanguageList, CATEGORY_FOLDERS, type UpstreamFile } from "../lib/language-list";
 
 const TARBALL_URL =
   "https://github.com/commoncrawl/web-languages/archive/refs/heads/main.tar.gz";
-const CATEGORY_FOLDERS = ["living", "extinct", "historical", "constructed", "special"] as const;
 const PUBLIC_DIR = path.join(__dirname, "..", "public");
 const LINKS_DIR = path.join(PUBLIC_DIR, "repo-links");
-
-type RepoLinkRow = {
-  language_id: string;
-  url: string;
-  note: string | null;
-};
-
-/** Collapses to one row per (language_id, url), keeping whichever
- * occurrence was parsed first. The source repo can list the same URL under
- * two sections in one file, or two files can resolve to the same language. */
-export function dedupeRepoLinkRows(rows: RepoLinkRow[]): RepoLinkRow[] {
-  const seen = new Map<string, RepoLinkRow>();
-  for (const row of rows) {
-    const key = `${row.language_id}\t${row.url}`;
-    if (!seen.has(key)) seen.set(key, row);
-  }
-  return [...seen.values()];
-}
-
-/** Groups rows by language, each group sorted by url. */
-export function groupByLanguage(rows: RepoLinkRow[]): Map<string, { url: string; note: string | null }[]> {
-  const groups = new Map<string, { url: string; note: string | null }[]>();
-  for (const { language_id, url, note } of rows) {
-    const group = groups.get(language_id) ?? [];
-    group.push({ url, note });
-    groups.set(language_id, group);
-  }
-  for (const group of groups.values()) group.sort((a, b) => (a.url < b.url ? -1 : a.url > b.url ? 1 : 0));
-  return groups;
-}
 
 async function downloadTarball(destPath: string) {
   const response = await fetch(TARBALL_URL);
@@ -74,9 +42,26 @@ async function findExtractedRepoRoot(workDir: string): Promise<string> {
   return path.join(workDir, repoDir.name);
 }
 
-async function main() {
-  const languages = languagesData as LanguageRecord[];
+async function readUpstreamFiles(repoRoot: string): Promise<UpstreamFile[]> {
+  const files: UpstreamFile[] = [];
+  for (const folder of CATEGORY_FOLDERS) {
+    const folderPath = path.join(repoRoot, folder);
+    let names: string[];
+    try {
+      names = (await readdir(folderPath)).filter(
+        (f) => f.endsWith(".md") && f.toLowerCase() !== "readme.md",
+      );
+    } catch {
+      continue;
+    }
+    for (const file of names) {
+      files.push({ folder, file, content: await readFile(path.join(folderPath, file), "utf-8") });
+    }
+  }
+  return files;
+}
 
+async function main() {
   const workDir = await mkdtemp(path.join(tmpdir(), "web-languages-"));
   try {
     const tarballPath = path.join(workDir, "repo.tar.gz");
@@ -85,84 +70,42 @@ async function main() {
 
     console.log("Extracting...");
     await tar.extract({ file: tarballPath, cwd: workDir });
-    const repoRoot = await findExtractedRepoRoot(workDir);
+    const files = await readUpstreamFiles(await findExtractedRepoRoot(workDir));
 
-    const rows: RepoLinkRow[] = [];
-    const unmatched: string[] = [];
-
-    for (const folder of CATEGORY_FOLDERS) {
-      const folderPath = path.join(repoRoot, folder);
-      let files: string[];
-      try {
-        files = (await readdir(folderPath)).filter(
-          (f) => f.endsWith(".md") && f.toLowerCase() !== "readme.md",
-        );
-      } catch {
-        continue;
-      }
-
-      for (const file of files) {
-        const content = await readFile(path.join(folderPath, file), "utf-8");
-        const parsed = parseLanguageMarkdown(content);
-        if (!parsed.displayName) continue;
-
-        let match: LanguageRecord | undefined;
-        for (const name of [parsed.displayName, ...parsed.additionalNames]) {
-          match = matchLanguageByName(name, languages);
-          if (match) break;
-        }
-
-        if (!match) {
-          unmatched.push(`${folder}/${file} (${parsed.displayName})`);
-          continue;
-        }
-
-        for (const link of parsed.links) {
-          rows.push({ language_id: match.id, url: link.url, note: link.note });
-        }
-      }
-    }
-
-    const dedupedRows = dedupeRepoLinkRows(rows);
-    const groups = groupByLanguage(dedupedRows);
-
+    const { languages, links, warnings } = buildLanguageList(files);
+    const linkCount = [...links.values()].reduce((sum, list) => sum + list.length, 0);
     console.log(
-      `Parsed ${rows.length} links (${dedupedRows.length} unique) for ${groups.size} languages ` +
-        `across ${CATEGORY_FOLDERS.length} category folders. ${unmatched.length} files unmatched.`,
+      `Read ${files.length} files: ${languages.length} languages, ` +
+        `${links.size} with links (${linkCount} links in all).`,
     );
-    if (unmatched.length > 0) {
-      console.log("Unmatched files (first 20):");
-      for (const u of unmatched.slice(0, 20)) console.log(`  - ${u}`);
-    }
+    for (const warning of warnings) console.warn(`  ! ${warning}`);
 
     // An empty result would ship a site that lists nothing; fail the build instead.
-    if (groups.size === 0) throw new Error("Parsed no links from the upstream repo; aborting.");
+    if (languages.length === 0 || links.size === 0) {
+      throw new Error("Parsed no languages or links from the upstream repo; aborting.");
+    }
 
     // Only this script's own generated folder is cleared, so languages dropped
     // upstream don't linger.
     await rm(LINKS_DIR, { recursive: true, force: true });
     await mkdir(LINKS_DIR, { recursive: true });
-    for (const [languageId, links] of groups) {
-      await writeFile(path.join(LINKS_DIR, `${languageId}.json`), JSON.stringify(links), "utf-8");
+    for (const [languageId, list] of links) {
+      await writeFile(path.join(LINKS_DIR, `${languageId}.json`), JSON.stringify(list), "utf-8");
     }
+    await writeFile(path.join(PUBLIC_DIR, "language-list.json"), JSON.stringify(languages), "utf-8");
     await writeFile(
       path.join(PUBLIC_DIR, "stats.json"),
-      JSON.stringify({ languagesWithSources: groups.size }),
+      JSON.stringify({ languagesWithSources: links.size }),
       "utf-8",
     );
 
-    console.log(`Wrote ${groups.size} files to public/repo-links/ and public/stats.json.`);
+    console.log("Wrote public/language-list.json, public/repo-links/ and public/stats.json.");
   } finally {
     await rm(workDir, { recursive: true, force: true });
   }
 }
 
-const isMainModule =
-  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
-
-if (isMainModule) {
-  main().catch((error) => {
-    console.error(error);
-    process.exitCode = 1;
-  });
-}
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

@@ -15,26 +15,27 @@ here helps that language show up where it currently doesn't.
 ## How to contribute
 
 1. Open the [site](https://web-languages.invisible.info/) and
-   search for your language — by name or by its 3-letter code.
+   search for your language — by name or by its 3-letter SIL code.
 2. Paste the link to a website that's actually written in that language,
    with an optional note about what it is.
 3. Send it. That's it — no sign-up, no GitHub account.
 
 The site shows what's already listed for a language, so you can check
-before adding one that's already there. New links are reviewed by a person
+before adding one that's already there. New links are reviewed by us
 before they are added.
 
 
 ## For developers
 
 This repo is the engine behind the site above. It's a Next.js app on
-[Railway](https://railway.com). There is no database: the list of known
-links is built from the upstream repo on every deploy, and submissions
-are GitHub issues that end up in a CSV file in this repo.
+[Railway](https://railway.com). There is no database: the language list
+(names, ISO codes, other names) and the known links are both built from the
+upstream `web-languages` repo on every deploy, and submissions are GitHub
+issues that end up in a CSV file in this repo.
 
 ```bash
 npm install
-npm run sync-repo-links   # once, to create the link files the site reads
+npm run sync-repo-links   # once, to create the language and link files the site reads
 npm run dev               # local copy for trying out a code change
                           # before it's pushed — the live site itself runs
                           # on Railway and is never started this way
@@ -59,8 +60,7 @@ live site. Without them the site still works, but sending a link fails.
 | `npm run build` / `npm run start` | What Railway runs to serve the live site |
 | `npm run lint` | ESLint |
 | `npm test` | Unit tests |
-| `npm run seed-languages` | Rebuild `public/languages.json` from SIL's language list |
-| `npm run sync-repo-links` | Rebuild `public/repo-links/` and `public/stats.json` from the live `web-languages` repo |
+| `npm run sync-repo-links` | Rebuild `public/language-list.json`, `public/repo-links/` and `public/stats.json` from the live `web-languages` repo |
 
 **How submissions flow:**
 
@@ -79,7 +79,7 @@ live site. Without them the site still works, but sending a link fails.
 
 Both CSV files record the visitor's interface language (`ui_locale`) and the
 issue number. The workflow uses only GitHub's built-in per-run token — no
-secret of ours is stored on GitHub — and ignores the `approved` label from
+secret of ours is stored on GitHub - and ignores the `approved` label from
 anyone without write access.
 
 **Interface languages:** site content lives in `lib/i18n/messages/`, one file
@@ -89,9 +89,10 @@ it to `lib/i18n/locales.ts`, add its content file, and register it in
 To change existing site content, just edit that language's file.
 
 **Keeping the data fresh:** `npm run build` runs `sync-repo-links` first, so
-every deploy pulls in the links added upstream. To pick up new upstream
-links without a code change, redeploy on Railway. Run `npm run seed-languages`
-only if SIL's own language list changes (rare).
+every deploy pulls in the languages and links added upstream. To pick up
+new upstream changes without a code change, redeploy on Railway. Each
+upstream language file supplies its own name, other names, category and
+ISO-639-3 code; the sync warns about any file that has no code.
 
 **Deploying:** Railway auto-builds on push to the connected branch, with
 `GITHUB_TOKEN` and `GITHUB_REPO` set as service variables before the first
