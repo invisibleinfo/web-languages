@@ -65,7 +65,8 @@ live site. Without them the site still works, but sending a link fails.
 **How submissions flow:**
 
 1. A visitor sends links. The site opens **one issue** in `GITHUB_REPO`,
-   labelled `submission`, `lang:<code>` and `ui:<interface language>`.
+   labelled `submission` and `ui:<interface language>`, with the language
+   code in its title.
    Links already listed upstream or already approved are dropped first.
 2. A maintainer reviews the issue. To drop a bad link, edit the issue and
    delete its line from the list.

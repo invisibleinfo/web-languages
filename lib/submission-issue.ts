@@ -34,7 +34,9 @@ export function buildIssue(
 
   return {
     title: `[${languageId}] ${links.length} ${links.length === 1 ? "link" : "links"}`,
-    labels: [SUBMISSION_LABEL, `lang:${languageId}`, `ui:${uiLocale}`],
+    // No per-language label: there are ~7,900 languages, and the title
+    // already carries the code.
+    labels: [SUBMISSION_LABEL, `ui:${uiLocale}`],
     body: [
       `Language: ${languageId}`,
       `UI language: ${uiLocale}`,

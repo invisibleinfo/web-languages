@@ -31,6 +31,9 @@ function env(name: string): string {
 
 const repo = env("GITHUB_REPOSITORY");
 const issueNumber = Number(env("ISSUE_NUMBER"));
+// Hands the approve step's comment to the finish step. Actions gives every
+// step RUNNER_TEMP; RESULT_FILE overrides it for local runs.
+const resultFile = () => process.env.RESULT_FILE ?? path.join(env("RUNNER_TEMP"), "approval-result.json");
 
 async function github<T>(route: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API}/repos/${repo}${route}`, {
@@ -104,7 +107,7 @@ async function approve() {
   console.log(`Added ${records.length} link(s); skipped ${duplicates.length} duplicate(s).`);
 
   await writeFile(
-    env("RESULT_FILE"),
+    resultFile(),
     JSON.stringify({ comment: approvalComment(records.length, duplicates, parsed.invalid) }),
     "utf-8",
   );
@@ -124,7 +127,7 @@ async function reject() {
 async function finish() {
   let comment: string;
   try {
-    ({ comment } = JSON.parse(await readFile(env("RESULT_FILE"), "utf-8")) as { comment: string });
+    ({ comment } = JSON.parse(await readFile(resultFile(), "utf-8")) as { comment: string });
   } catch {
     console.log("No approval result; leaving the issue as it is.");
     return;
