@@ -46,7 +46,6 @@ const zh: Messages = {
   },
   lists: {
     listed: "已收录",
-    recent: "最近添加",
     none: "暂无",
     loading: "正在加载……",
     more: "查看更多",

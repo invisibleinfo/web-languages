@@ -50,7 +50,6 @@ const hi: Messages = {
   },
   lists: {
     listed: "पहले से सूची में",
-    recent: "हाल ही में जोड़े गए",
     none: "अभी कोई नहीं",
     loading: "लोड हो रहा है...",
     more: "और देखें",

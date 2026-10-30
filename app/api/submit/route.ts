@@ -1,13 +1,8 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { chunkByLength } from "@/lib/chunk";
+import { createIssue } from "@/lib/github";
+import { readKnownUrls, urlVariants } from "@/lib/known-links";
+import { buildIssue } from "@/lib/submission-issue";
 import { submissionPayloadSchema } from "@/lib/validation";
-
-/** The same address with and without a trailing slash, so
- * "https://a.com/x" and "https://a.com/x/" count as one link. */
-function urlVariants(url: string): string[] {
-  return url.endsWith("/") ? [url, url.slice(0, -1)] : [url, `${url}/`];
-}
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
@@ -19,42 +14,18 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const { languageId, links, sessionId, uiLocale, honeypot } = parsed.data;
+  const { languageId, links, uiLocale } = parsed.data;
 
-  // A filled honeypot means a bot. Pretend success so it doesn't learn to
-  // look elsewhere, but never write the row.
-  if (honeypot) {
-    return NextResponse.json({ ok: true, count: links.length, duplicates: 0 });
-  }
-
-  const supabase = createAdminClient();
-
-  // Drop links this language already has: in the synced repo list, or in a
-  // submission that wasn't rejected (rejected ones may be re-sent), plus
-  // repeats within this same batch.
-  // The URLs travel in the query string, which Supabase rejects past roughly
-  // 15 KB — so they're looked up in batches small enough to stay well under.
-  const lookups = chunkByLength(links.flatMap((link) => urlVariants(link.url))).flatMap(
-    (batch) => [
-      supabase.from("repo_links").select("url").eq("language_id", languageId).in("url", batch),
-      supabase
-        .from("submissions")
-        .select("url")
-        .eq("language_id", languageId)
-        .in("status", ["pending", "approved", "duplicate"])
-        .in("url", batch),
-    ],
-  );
-  const results = await Promise.all(lookups);
-  const lookupError = results.find((result) => result.error)?.error;
-  if (lookupError) {
-    console.error("duplicate lookup failed", lookupError);
+  // Drop links this language already has (upstream list or an approved
+  // submission), plus repeats within this same batch. Links in issues still
+  // waiting for review aren't checked; approval skips any that slipped in.
+  let taken: Set<string>;
+  try {
+    taken = await readKnownUrls(languageId);
+  } catch (error) {
+    console.error("known links lookup failed", error);
     return NextResponse.json({ error: "Could not save submission" }, { status: 500 });
   }
-
-  const taken = new Set(
-    results.flatMap((result) => result.data ?? []).flatMap((row) => urlVariants(row.url)),
-  );
   const fresh = links.filter((link) => {
     if (taken.has(link.url)) return false;
     for (const variant of urlVariants(link.url)) taken.add(variant);
@@ -66,20 +37,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, count: 0, duplicates });
   }
 
-  // Explicit column set — status is never taken from the request body, so
-  // every row lands as the table's default 'pending' regardless of payload.
-  const rows = fresh.map((link) => ({
-    language_id: languageId,
-    url: link.url,
-    note: link.note || null,
-    session_id: sessionId,
-    ui_locale: uiLocale,
-  }));
-  const { error } = await supabase.from("submissions").insert(rows);
-  if (error) {
-    console.error("submissions insert failed", error);
+  try {
+    await createIssue(buildIssue(languageId, uiLocale, fresh));
+  } catch (error) {
+    console.error("issue creation failed", error);
     return NextResponse.json({ error: "Could not save submission" }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, count: rows.length, duplicates });
+  return NextResponse.json({ ok: true, count: fresh.length, duplicates });
 }

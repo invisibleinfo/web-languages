@@ -50,7 +50,6 @@ const en = {
   },
   lists: {
     listed: "Already listed",
-    recent: "Recently added",
     none: "None yet",
     loading: "Loading...",
     more: "See more",

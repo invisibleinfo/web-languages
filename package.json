@@ -7,11 +7,11 @@
   },
   "scripts": {
     "dev": "next dev",
+    "prebuild": "tsx scripts/sync-repo-links.ts",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "seed-languages": "tsx scripts/seed-languages.ts",
     "sync-repo-links": "tsx scripts/sync-repo-links.ts"
   },
   "dependencies": {

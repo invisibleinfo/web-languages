@@ -26,7 +26,7 @@ const plexMono = IBM_Plex_Mono({
 });
 
 // The interface language comes from the browser's Accept-Language header
-// on every request — nothing is stored (see docs/notes.md).
+// on every request — nothing is stored.
 async function requestLocale() {
   return pickLocale((await headers()).get("accept-language"));
 }

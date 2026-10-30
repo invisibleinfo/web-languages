@@ -50,7 +50,6 @@ const fr: Messages = {
   },
   lists: {
     listed: "Déjà répertoriés",
-    recent: "Ajoutés récemment",
     none: "Aucun pour l'instant",
     loading: "Chargement...",
     more: "Voir plus",

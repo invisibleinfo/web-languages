@@ -50,7 +50,6 @@ const pt: Messages = {
   },
   lists: {
     listed: "Já na lista",
-    recent: "Adicionados recentemente",
     none: "Nenhum ainda",
     loading: "Carregando...",
     more: "Ver mais",

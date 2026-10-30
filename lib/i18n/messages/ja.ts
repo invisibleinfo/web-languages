@@ -50,7 +50,6 @@ const ja: Messages = {
   },
   lists: {
     listed: "登録済み",
-    recent: "最近の追加",
     none: "まだありません",
     loading: "読み込み中…",
     more: "もっと見る",

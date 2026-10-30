@@ -10,8 +10,7 @@ export type UrlListItem = {
   note: string | null;
 };
 
-/** Shared list shape for both "already listed" (repo_links) and "recently
- * added" (public_submissions): three items, then "See more" (which asks the
+/** The "already listed" links: three items, then "See more" (which asks the
  * parent for the next page) and "See less" to fold back to three. */
 export function UrlList({
   heading,
