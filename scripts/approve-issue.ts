@@ -2,9 +2,11 @@
  * Run by .github/workflows/approve-submission.yml, not by hand. Turns a
  * reviewed submission issue into rows of a CSV file in the repo.
  *
- *   MODE=approve  issue labelled `approved` → rows appended to data/submissions.csv
- *   MODE=reject   issue closed as "not planned" → rows appended to data/rejected.csv
- *   MODE=finish   after the workflow pushed the CSV → comment on and close the issue
+ *   MODE=approve  issue labelled `approved` → rows appended to data/accepted.csv
+ *   MODE=reject   issue labelled `rejected`, or closed as "not planned" →
+ *                 rows appended to data/rejected.csv (once per issue)
+ *   MODE=finish   after the workflow pushed the CSV → comment on and close the
+ *                 issue (as CLOSE_REASON, default "completed")
  *
  * Closing happens in a separate step so a failed push never leaves a closed
  * issue whose links were not saved.
@@ -14,13 +16,13 @@
  */
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { approvalComment, approvedRecords, rejectedRecords } from "../lib/approval";
-import { appendCsvRecords } from "../lib/csv";
-import { parseIssueBody, SUBMISSION_LABEL } from "../lib/submission-issue";
+import { approvalComment, approvedRecords, rejectedRecords, rejectionComment } from "../lib/approval";
+import { appendCsvRecords, parseCsvRecords } from "../lib/csv";
+import { APPROVED_LABEL, parseIssueBody, SUBMISSION_LABEL } from "../lib/submission-issue";
 
 // Actions sets GITHUB_API_URL itself; the fallback is for running locally.
 const API = process.env.GITHUB_API_URL ?? "https://api.github.com";
-const SUBMISSIONS_CSV = path.join(__dirname, "..", "data", "submissions.csv");
+const ACCEPTED_CSV = path.join(__dirname, "..", "data", "accepted.csv");
 const REJECTED_CSV = path.join(__dirname, "..", "data", "rejected.csv");
 
 function env(name: string): string {
@@ -60,8 +62,20 @@ type Issue = {
 async function loadSubmission() {
   const issue = await github<Issue>(`/issues/${issueNumber}`);
   const labels = issue.labels.map((label) => (typeof label === "string" ? label : label.name));
-  if (issue.pull_request || !labels.includes(SUBMISSION_LABEL)) return { issue, parsed: null };
-  return { issue, parsed: parseIssueBody(issue.body ?? "") };
+  if (issue.pull_request || !labels.includes(SUBMISSION_LABEL)) return { issue, labels, parsed: null };
+  return { issue, labels, parsed: parseIssueBody(issue.body ?? "") };
+}
+
+/** Only people with write access can decide a submission; anyone else's
+ * label or close is ignored. */
+async function senderCanDecide(): Promise<boolean> {
+  const sender = env("SENDER");
+  const { permission } = await github<{ permission: string }>(
+    `/collaborators/${encodeURIComponent(sender)}/permission`,
+  );
+  if (permission === "admin" || permission === "write") return true;
+  console.log(`${sender} has "${permission}" access; ignoring this.`);
+  return false;
 }
 
 async function readCsv(file: string): Promise<string> {
@@ -74,14 +88,7 @@ async function readCsv(file: string): Promise<string> {
 }
 
 async function approve() {
-  const sender = env("SENDER");
-  const { permission } = await github<{ permission: string }>(
-    `/collaborators/${encodeURIComponent(sender)}/permission`,
-  );
-  if (permission !== "admin" && permission !== "write") {
-    console.log(`${sender} has "${permission}" access; ignoring the label.`);
-    return;
-  }
+  if (!(await senderCanDecide())) return;
 
   const { issue, parsed } = await loadSubmission();
   if (issue.state !== "open") {
@@ -96,13 +103,13 @@ async function approve() {
     throw new Error("Issue body is not a readable submission");
   }
 
-  const existing = await readCsv(SUBMISSIONS_CSV);
+  const existing = await readCsv(ACCEPTED_CSV);
   const { records, duplicates } = approvedRecords(parsed, existing, {
     issue: issueNumber,
     decidedAt: new Date().toISOString(),
   });
   if (records.length > 0) {
-    await writeFile(SUBMISSIONS_CSV, appendCsvRecords(existing, records), "utf-8");
+    await writeFile(ACCEPTED_CSV, appendCsvRecords(existing, records), "utf-8");
   }
   console.log(`Added ${records.length} link(s); skipped ${duplicates.length} duplicate(s).`);
 
@@ -114,14 +121,29 @@ async function approve() {
 }
 
 async function reject() {
-  const { parsed } = await loadSubmission();
+  if (!(await senderCanDecide())) return;
+
+  const { labels, parsed } = await loadSubmission();
   if (!parsed) {
     console.log("Not a readable submission issue; nothing to record.");
     return;
   }
+  if (labels.includes(APPROVED_LABEL)) {
+    console.log("Issue is approved; not recording a rejection.");
+    return;
+  }
+  // The label and a manual "not planned" close can both fire for one issue.
+  const existing = await readCsv(REJECTED_CSV);
+  if (parseCsvRecords(existing).some((row) => row.issue === String(issueNumber))) {
+    console.log("Issue is already recorded as rejected; nothing to do.");
+    return;
+  }
+
   const records = rejectedRecords(parsed, { issue: issueNumber, decidedAt: new Date().toISOString() });
-  await writeFile(REJECTED_CSV, appendCsvRecords(await readCsv(REJECTED_CSV), records), "utf-8");
+  await writeFile(REJECTED_CSV, appendCsvRecords(existing, records), "utf-8");
   console.log(`Recorded ${records.length} rejected link(s).`);
+
+  await writeFile(resultFile(), JSON.stringify({ comment: rejectionComment(records.length) }), "utf-8");
 }
 
 async function finish() {
@@ -135,7 +157,7 @@ async function finish() {
   await github(`/issues/${issueNumber}/comments`, { method: "POST", body: JSON.stringify({ body: comment }) });
   await github(`/issues/${issueNumber}`, {
     method: "PATCH",
-    body: JSON.stringify({ state: "closed", state_reason: "completed" }),
+    body: JSON.stringify({ state: "closed", state_reason: process.env.CLOSE_REASON ?? "completed" }),
   });
 }
 

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { SubmissionForm } from "@/components/submission-form";
 import { UiLanguageSelect } from "@/components/ui-language-select";
 import { UrlList, type UrlListItem } from "@/components/url-list";
-import { formatNodes, plural } from "@/lib/i18n/format";
+import { formatNodes } from "@/lib/i18n/format";
 import { loadLanguages, type LanguageRecord } from "@/lib/languages";
 
 const FIRST_PAGE = 3;
@@ -111,7 +111,7 @@ function SiteHeader() {
 }
 
 export default function Home() {
-  const { locale, messages } = useI18n();
+  const { messages } = useI18n();
   const [languages, setLanguages] = useState<LanguageRecord[]>([]);
   const [languagesFailed, setLanguagesFailed] = useState(false);
   const [selected, setSelected] = useState<LanguageRecord | null>(null);
@@ -215,16 +215,9 @@ export default function Home() {
                 <section className="border-y border-verified py-8 text-center">
                   <Check className="mx-auto mb-3 h-10 w-10 text-verified" aria-hidden />
                   <h2 className="font-heading text-2xl font-semibold">{messages.thanks.title}</h2>
-                  <p className="mt-1 text-ink-soft">
-                    {thanks.added > 0
-                      ? plural(locale, messages.thanks.shared, thanks.added, {
-                          language: selected.refName,
-                        })
-                      : messages.thanks.allDuplicates}
-                    {thanks.added > 0 &&
-                      thanks.skipped > 0 &&
-                      ` ${plural(locale, messages.thanks.alreadyHad, thanks.skipped)}`}
-                  </p>
+                  {/* Only "Thank you" is shown on purpose. The shared / alreadyHad /
+                      allDuplicates strings and the counts in `thanks` are kept in
+                      case the detail line comes back. */}
                   <Button type="button" onClick={() => setThanks(null)} className="mt-4">
                     {messages.thanks.addMore}
                   </Button>

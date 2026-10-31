@@ -5,7 +5,10 @@
  * static files the site serves:
  *
  *   public/language-list.json           every language: code, name, other names, category
- *   public/repo-links/<iso-code>.json   [{ url, note }], sorted by url
+ *   public/repo-links/<iso-code>.json   [{ url, note }]: links approved here
+ *                                       (data/accepted.csv, newest first), then
+ *                                       the upstream ones sorted by url
+ *   public/all-links.csv                every link in one file, for the moderator
  *   public/stats.json                   { languagesWithSources }
  *
  * The upstream repo is the only source: each file names its language and
@@ -20,12 +23,23 @@ import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import path from "node:path";
 import * as tar from "tar";
+import { allLinksCsv, mergeAccepted } from "../lib/all-links";
 import { buildLanguageList, CATEGORY_FOLDERS, type UpstreamFile } from "../lib/language-list";
 
 const TARBALL_URL =
   "https://github.com/commoncrawl/web-languages/archive/refs/heads/main.tar.gz";
 const PUBLIC_DIR = path.join(__dirname, "..", "public");
 const LINKS_DIR = path.join(PUBLIC_DIR, "repo-links");
+const ACCEPTED_CSV = path.join(__dirname, "..", "data", "accepted.csv");
+
+async function readAcceptedCsv(): Promise<string> {
+  try {
+    return await readFile(ACCEPTED_CSV, "utf-8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "";
+    throw error;
+  }
+}
 
 async function downloadTarball(destPath: string) {
   const response = await fetch(TARBALL_URL);
@@ -85,21 +99,30 @@ async function main() {
       throw new Error("Parsed no languages or links from the upstream repo; aborting.");
     }
 
+    // Links approved here show up on the site too, in front of the upstream ones.
+    const acceptedCsv = await readAcceptedCsv();
+    const shown = mergeAccepted(links, acceptedCsv);
+    const languageIds = new Set(languages.map((language) => language.id));
+    const languagesWithSources = [...shown.keys()].filter((id) => languageIds.has(id)).length;
+
     // Only this script's own generated folder is cleared, so languages dropped
     // upstream don't linger.
     await rm(LINKS_DIR, { recursive: true, force: true });
     await mkdir(LINKS_DIR, { recursive: true });
-    for (const [languageId, list] of links) {
+    for (const [languageId, list] of shown) {
       await writeFile(path.join(LINKS_DIR, `${languageId}.json`), JSON.stringify(list), "utf-8");
     }
     await writeFile(path.join(PUBLIC_DIR, "language-list.json"), JSON.stringify(languages), "utf-8");
+    await writeFile(path.join(PUBLIC_DIR, "all-links.csv"), allLinksCsv(links, acceptedCsv), "utf-8");
     await writeFile(
       path.join(PUBLIC_DIR, "stats.json"),
-      JSON.stringify({ languagesWithSources: links.size }),
+      JSON.stringify({ languagesWithSources }),
       "utf-8",
     );
 
-    console.log("Wrote public/language-list.json, public/repo-links/ and public/stats.json.");
+    console.log(
+      "Wrote public/language-list.json, public/repo-links/, public/all-links.csv and public/stats.json.",
+    );
   } finally {
     await rm(workDir, { recursive: true, force: true });
   }

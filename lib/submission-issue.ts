@@ -15,6 +15,7 @@ export type ParsedIssue = {
 
 export const SUBMISSION_LABEL = "submission";
 export const APPROVED_LABEL = "approved";
+export const REJECTED_LABEL = "rejected";
 
 /** The issue a maintainer reviews. The links sit in a code fence so GitHub
  * never turns a note into a mention or a live link, and so a line can be
@@ -47,7 +48,7 @@ export function buildIssue(
       ...lines,
       fence,
       "",
-      `Add the \`${APPROVED_LABEL}\` label to accept, or close as "not planned" to reject.`,
+      `Add the \`${APPROVED_LABEL}\` label to accept, or the \`${REJECTED_LABEL}\` label to reject.`,
     ].join("\n"),
   };
 }

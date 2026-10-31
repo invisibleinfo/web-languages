@@ -15,7 +15,7 @@ function toRecord(parsed: ParsedIssue, url: string, note: string, { issue, decid
   };
 }
 
-/** Rows to add to submissions.csv for an approved issue. Links already in
+/** Rows to add to accepted.csv for an approved issue. Links already in
  * the file for that language (a double submission, or an earlier approval)
  * are skipped and returned in `duplicates`. */
 export function approvedRecords(
@@ -47,9 +47,14 @@ export function rejectedRecords(parsed: ParsedIssue, decision: Decision): CsvRec
   return parsed.links.map(({ url, note }) => toRecord(parsed, url, note, decision));
 }
 
+/** The comment left on a rejected issue. */
+export function rejectionComment(rejected: number): string {
+  return `Recorded ${rejected} ${rejected === 1 ? "link" : "links"} in \`data/rejected.csv\`.`;
+}
+
 /** The comment left on an approved issue. */
 export function approvalComment(added: number, duplicates: string[], invalid: string[]): string {
-  const lines = [`Added ${added} ${added === 1 ? "link" : "links"} to \`data/submissions.csv\`.`];
+  const lines = [`Added ${added} ${added === 1 ? "link" : "links"} to \`data/accepted.csv\`.`];
   if (duplicates.length > 0) {
     lines.push("", "Skipped (already listed):", ...duplicates.map((url) => `- \`${url}\``));
   }

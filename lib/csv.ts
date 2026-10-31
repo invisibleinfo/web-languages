@@ -1,4 +1,4 @@
-/** The columns of data/submissions.csv and data/rejected.csv. */
+/** The columns of data/accepted.csv and data/rejected.csv. */
 export const CSV_COLUMNS = [
   "language_id",
   "url",
@@ -28,6 +28,12 @@ export function formatCsvRecord(record: CsvRecord): string {
     const value = column === "note" ? defuseFormula(record[column]) : record[column];
     return escapeField(value);
   }).join(",");
+}
+
+/** One CSV line from plain values, for files that aren't decision records.
+ * Every value is defused, so a note can't run as a formula in a spreadsheet. */
+export function formatCsvRow(values: string[]): string {
+  return values.map((value) => escapeField(defuseFormula(value))).join(",");
 }
 
 /** Adds records to the end of a decisions file's text, starting it with the

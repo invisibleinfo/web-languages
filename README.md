@@ -24,6 +24,27 @@ The site shows what's already listed for a language, so you can check
 before adding one that's already there. New links are reviewed by us
 before they are added.
 
+## Reviewing submissions (for Moderators)
+
+Each submission is an issue in `GITHUB_REPO`, labelled `submission`.
+
+1. Open the issue and check the links in the list.
+2. To drop a bad link, edit the issue and delete its line.
+3. **Approve:** add the `approved` label. The links still in the list are
+   added to `data/accepted.csv`, a comment is left, and the issue closes.
+4. **Reject:** add the `rejected` label. The links are added to
+   `data/rejected.csv`, a comment is left, and the issue closes as "not
+   planned". Closing the issue as "not planned" yourself has the same effect.
+5. Leave the issue open until the workflow finishes; it closes the issue
+   itself. Use one label per issue, not both.
+
+To see every link in one place, open `/all-links.csv` on the live site (in
+Excel or Sheets). It lists the approved and upstream links per language and is
+rebuilt on every deploy.
+
+The `approved` and `rejected` labels have to exist in the repo. If they
+don't, create them under Issues → Labels. GitHub creates `submission` and
+`ui:<language>` on its own.
 
 ## For developers
 
@@ -60,7 +81,7 @@ live site. Without them the site still works, but sending a link fails.
 | `npm run build` / `npm run start` | What Railway runs to serve the live site |
 | `npm run lint` | ESLint |
 | `npm test` | Unit tests |
-| `npm run sync-repo-links` | Rebuild `public/language-list.json`, `public/repo-links/` and `public/stats.json` from the live `web-languages` repo |
+| `npm run sync-repo-links` | Rebuild `public/language-list.json`, `public/repo-links/`, `public/all-links.csv` and `public/stats.json` from the live `web-languages` repo and `data/accepted.csv` |
 
 **How submissions flow:**
 
@@ -68,19 +89,15 @@ live site. Without them the site still works, but sending a link fails.
    labelled `submission` and `ui:<interface language>`, with the language
    code in its title.
    Links already listed upstream or already approved are dropped first.
-2. A maintainer reviews the issue. To drop a bad link, edit the issue and
-   delete its line from the list.
-3. **Accept:** add the `approved` label. The workflow in
-   `.github/workflows/approve-submission.yml` appends the links still in the
-   issue to `data/submissions.csv`, commits it, and closes the issue.
-   Railway redeploys on that commit.
-   **Reject:** close the issue as "not planned". The links are logged in
-   `data/rejected.csv`.
+2. A maintainer reviews the issue (see below). The workflow in
+   `.github/workflows/approve-submission.yml` then records the links in
+   `data/accepted.csv` or `data/rejected.csv`, commits the file, and closes
+   the issue. Railway redeploys on that commit.
 
 Both CSV files record the visitor's interface language (`ui_locale`) and the
 issue number. The workflow uses only GitHub's built-in per-run token — no
-secret of ours is stored on GitHub - and ignores the `approved` label from
-anyone without write access.
+secret of ours is stored on GitHub - and ignores labels added by anyone
+without write access.
 
 **Interface languages:** site content lives in `lib/i18n/messages/`, one file
 per language, with `en.ts` as the source. To add a language, add
