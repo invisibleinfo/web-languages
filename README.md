@@ -28,23 +28,29 @@ before they are added.
 
 Each submission is an issue in `GITHUB_REPO`, labelled `submission`.
 
-1. Open the issue and check the links in the list.
-2. To drop a bad link, edit the issue and delete its line.
-3. **Approve:** add the `approved` label. The links still in the list are
-   added to `data/accepted.csv`, a comment is left, and the issue closes.
-4. **Reject:** add the `rejected` label. The links are added to
-   `data/rejected.csv`, a comment is left, and the issue closes as "not
-   planned". Closing the issue as "not planned" yourself has the same effect.
-5. Leave the issue open until the workflow finishes; it closes the issue
-   itself. Use one label per issue, not both.
+1. Open the issue. Each link is a tick box, and the link itself is clickable
+   (Ctrl/Cmd-click to open it in a new tab).
+2. Tick the links you accept. Links left unticked are rejected.
+3. Optional: to say why, type the reason at the end of that link's line (after
+   the link and any note), for example `... not Punjabi`. Comments are never
+   read. Don't put text before the link.
+4. Add the `validated` label. Ticked links are added to `data/accepted.csv`,
+   unticked ones to `data/rejected.csv` (with your reasons in the `reason`
+   column), a comment summarises it, and the issue closes. Leave the issue
+   open until then.
 
-To see every link in one place, open `/all-links.csv` on the live site (in
-Excel or Sheets). It lists the approved and upstream links per language and is
-rebuilt on every deploy.
+To reject the whole submission, close the issue as "not planned" instead.
+Every link is then recorded in `data/rejected.csv`, ticked or not.
 
-The `approved` and `rejected` labels have to exist in the repo. If they
-don't, create them under Issues → Labels. GitHub creates `submission` and
-`ui:<language>` on its own.
+To see every link in one place, open `data/all-links.csv` (or `/all-links.csv`
+on the live site) in Excel or Sheets. It lists the approved and upstream links
+per language. Rejected links and reasons are never in it. Approvals update it
+automatically; the upstream part is a saved copy, so refresh it now and then
+with `npm run refresh-all-links` and commit the result.
+
+The `validated` label has to exist in the repo. If it doesn't, create it
+under Issues → Labels. GitHub creates `submission` and `ui:<language>` on its
+own.
 
 ## For developers
 
@@ -81,7 +87,8 @@ live site. Without them the site still works, but sending a link fails.
 | `npm run build` / `npm run start` | What Railway runs to serve the live site |
 | `npm run lint` | ESLint |
 | `npm test` | Unit tests |
-| `npm run sync-repo-links` | Rebuild `public/language-list.json`, `public/repo-links/`, `public/all-links.csv` and `public/stats.json` from the live `web-languages` repo and `data/accepted.csv` |
+| `npm run sync-repo-links` | Rebuild `public/language-list.json`, `public/repo-links/` and `public/stats.json` from the live `web-languages` repo and `data/accepted.csv`, and copy `data/all-links.csv` to `public/` |
+| `npm run refresh-all-links` | Re-download the `web-languages` repo and rewrite `data/all-links.csv` (upstream links plus everything in `data/accepted.csv`); commit the result |
 
 **How submissions flow:**
 
@@ -91,13 +98,13 @@ live site. Without them the site still works, but sending a link fails.
    Links already listed upstream or already approved are dropped first.
 2. A maintainer reviews the issue (see below). The workflow in
    `.github/workflows/approve-submission.yml` then records the links in
-   `data/accepted.csv` or `data/rejected.csv`, commits the file, and closes
-   the issue. Railway redeploys on that commit.
+   `data/accepted.csv` and `data/rejected.csv`, updates `data/all-links.csv`,
+   commits the files, and closes the issue. Railway redeploys on that commit.
 
-Both CSV files record the visitor's interface language (`ui_locale`) and the
-issue number. The workflow uses only GitHub's built-in per-run token — no
-secret of ours is stored on GitHub - and ignores labels added by anyone
-without write access.
+Both CSV files record the visitor's interface language (`ui_locale`), the
+issue number and the reviewer's reason, if any. The workflow uses only
+GitHub's built-in per-run token — no secret of ours is stored on GitHub - and
+ignores labels added by anyone without write access.
 
 **Interface languages:** site content lives in `lib/i18n/messages/`, one file
 per language, with `en.ts` as the source. To add a language, add
@@ -109,7 +116,9 @@ To change existing site content, just edit that language's file.
 every deploy pulls in the languages and links added upstream. To pick up
 new upstream changes without a code change, redeploy on Railway. Each
 upstream language file supplies its own name, other names, category and
-ISO-639-3 code; the sync warns about any file that has no code.
+ISO-639-3 code; the sync warns about any file that has no code. The
+exception is `data/all-links.csv`: a deploy only copies the committed file, so
+refresh it with `npm run refresh-all-links`.
 
 **Deploying:** Railway auto-builds on push to the connected branch, with
 `GITHUB_TOKEN` and `GITHUB_REPO` set as service variables before the first

@@ -3,35 +3,46 @@ import { languageIdSchema, urlRowSchema } from "./validation";
 
 export type SubmittedLink = { url: string; note: string };
 
+const MAX_REASON_LENGTH = 300;
+
+/** A link as read back from an issue: its number, whether the maintainer
+ * ticked it, and any reason they wrote after it on the same line. */
+export type ReviewedLink = SubmittedLink & { number: number; checked: boolean; reason: string };
+
 export type IssueDraft = { title: string; labels: string[]; body: string };
 
 export type ParsedIssue = {
   languageId: string;
   uiLocale: Locale;
-  links: SubmittedLink[];
+  links: ReviewedLink[];
   /** Lines in the link list that aren't a valid address. */
   invalid: string[];
 };
 
 export const SUBMISSION_LABEL = "submission";
-export const APPROVED_LABEL = "approved";
-export const REJECTED_LABEL = "rejected";
+export const VALIDATED_LABEL = "validated";
 
-/** The issue a maintainer reviews. The links sit in a code fence so GitHub
- * never turns a note into a mention or a live link, and so a line can be
- * deleted by hand to reject just that link. */
+/** Inline code, so GitHub never turns a note into a mention or a live link.
+ * Padded when the text touches a backtick, as Markdown requires. */
+function codeSpan(text: string): string {
+  const longestRun = Math.max(0, ...(text.match(/`+/g) ?? []).map((run) => run.length));
+  const mark = "`".repeat(longestRun + 1);
+  return /^`|`$/.test(text) ? `${mark} ${text} ${mark}` : `${mark}${text}${mark}`;
+}
+
+/** The issue a maintainer reviews. Each link is a task-list tick box. An
+ * address is a plain autolink so it can be clicked; one that can't be an
+ * autolink falls back to inline code. */
 export function buildIssue(
   languageId: string,
   uiLocale: Locale,
   links: SubmittedLink[],
 ): IssueDraft {
-  const lines = links.map(({ url, note }) => {
+  const lines = links.map(({ url, note }, i) => {
+    const address = /^[^\s<>`]+$/.test(url) ? `<${url}>` : codeSpan(url);
     const oneLine = note.replace(/\s+/g, " ").trim();
-    return oneLine ? `${url} | ${oneLine}` : url;
+    return `- [ ] **${i + 1}.** ${address}${oneLine ? ` | ${codeSpan(oneLine)}` : ""}`;
   });
-  // A fence longer than any run of backticks inside, so content can't close it.
-  const longestRun = Math.max(0, ...(lines.join("\n").match(/`+/g) ?? []).map((run) => run.length));
-  const fence = "`".repeat(Math.max(3, longestRun + 1));
 
   return {
     title: `[${languageId}] ${links.length} ${links.length === 1 ? "link" : "links"}`,
@@ -42,18 +53,63 @@ export function buildIssue(
       `Language: ${languageId}`,
       `UI language: ${uiLocale}`,
       "",
-      "Links (delete any line you want to reject, then approve):",
+      "Tick the links to accept. Links left unticked are considered as rejected.",
+      "To give a reason, type it at the end of the link's line.",
       "",
-      fence,
       ...lines,
-      fence,
       "",
-      `Add the \`${APPROVED_LABEL}\` label to accept, or the \`${REJECTED_LABEL}\` label to reject.`,
+      `When you are done, add the \`${VALIDATED_LABEL}\` label.`,
     ].join("\n"),
   };
 }
 
-/** Reads an issue body back, as it is *now* (including hand edits).
+/** Reads one `<address>`, `` `code` `` or bare word off the front of `text`. */
+function readSpan(text: string): { value: string; rest: string } | null {
+  if (text.startsWith("<")) {
+    const end = text.indexOf(">");
+    return end === -1 ? null : { value: text.slice(1, end), rest: text.slice(end + 1) };
+  }
+  if (text.startsWith("`")) {
+    const open = /^`+/.exec(text)![0];
+    for (const run of text.matchAll(/`+/g)) {
+      if (run.index === 0 || run[0].length !== open.length) continue;
+      let value = text.slice(open.length, run.index);
+      if (/^ [\s\S]* $/.test(value) && value.trim() !== "") value = value.slice(1, -1);
+      return { value, rest: text.slice(run.index + open.length) };
+    }
+    return null;
+  }
+  const word = /^\S+/.exec(text);
+  return word ? { value: word[0], rest: text.slice(word[0].length) } : null;
+}
+
+const TASK_LINE = /^\s*[-*+]\s+\[([ xX])\]\s+(?:\*\*(\d+)\.\*\*\s+)?(.*)$/;
+
+const cleanReason = (text: string) => text.replace(/\s+/g, " ").trim().slice(0, MAX_REASON_LENGTH);
+
+/** The url, note and reason on one link line: `<url> | \`note\` reason`. The
+ * note is optional, and the reason is whatever follows the url or the note. */
+function splitLink(line: string): { url: string; note: string; reason: string } {
+  const address = readSpan(line.trim());
+  if (!address) return { url: line.trim(), note: "", reason: "" };
+  const after = address.rest.trim();
+  if (!after.startsWith("|")) return { url: address.value, note: "", reason: cleanReason(after) };
+  const noteText = after.slice(1).trim();
+  const note = noteText.startsWith("`") ? readSpan(noteText) : null;
+  return note
+    ? { url: address.value, note: note.value, reason: cleanReason(note.rest) }
+    : { url: address.value, note: noteText, reason: "" };
+}
+
+/** A line from the old code-fence list: `url | note`, the note as plain text. */
+function splitLegacyLink(line: string): { url: string; note: string; reason: string } {
+  const split = line.indexOf(" | ");
+  return split === -1
+    ? { url: line, note: "", reason: "" }
+    : { url: line.slice(0, split), note: line.slice(split + 3), reason: "" };
+}
+
+/** Reads an issue body back, as it is *now* (including ticks and hand edits).
  * Returns null when it isn't one of ours. */
 export function parseIssueBody(body: string): ParsedIssue | null {
   const language = languageIdSchema.safeParse(/^Language:[ \t]*(\S+)[ \t]*$/m.exec(body)?.[1]);
@@ -61,24 +117,46 @@ export function parseIssueBody(body: string): ParsedIssue | null {
   if (!language.success || !locale || !(LOCALE_CODES as string[]).includes(locale)) return null;
 
   const lines = body.split(/\r?\n/);
+  const entries = readEntries(lines);
+  if (!entries) return null;
+
+  const links: ReviewedLink[] = [];
+  const invalid: string[] = [];
+  for (const { text, checked, number, legacy } of entries) {
+    const { url, note, reason } = legacy ? splitLegacyLink(text) : splitLink(text);
+    const parsed = urlRowSchema.safeParse({ url, note });
+    if (parsed.success) links.push({ ...parsed.data, number, checked, reason });
+    else invalid.push(text.trim());
+  }
+
+  return { languageId: language.data, uiLocale: locale as Locale, links, invalid };
+}
+
+type Entry = { text: string; checked: boolean; number: number; legacy: boolean };
+
+/** The tick-box lines, or for issues opened before tick boxes existed, the
+ * lines in the code fence (all counted as ticked). */
+function readEntries(lines: string[]): Entry[] | null {
+  const ticks = lines.flatMap((line) => {
+    const match = TASK_LINE.exec(line);
+    return match ? [{ box: match[1], number: match[2], text: match[3] }] : [];
+  });
+  if (ticks.length > 0) {
+    return ticks.map(({ box, number, text }, i) => ({
+      text,
+      checked: box !== " ",
+      number: number ? Number(number) : i + 1,
+      legacy: false,
+    }));
+  }
+
   const open = lines.findIndex((line) => /^`{3,}$/.test(line.trim()));
   if (open === -1) return null;
   const fence = lines[open].trim();
   const close = lines.findIndex((line, i) => i > open && line.trim() === fence);
   if (close === -1) return null;
-
-  const links: SubmittedLink[] = [];
-  const invalid: string[] = [];
-  for (const line of lines.slice(open + 1, close)) {
-    if (!line.trim()) continue;
-    const split = line.indexOf(" | ");
-    const parsed = urlRowSchema.safeParse({
-      url: split === -1 ? line : line.slice(0, split),
-      note: split === -1 ? "" : line.slice(split + 3),
-    });
-    if (parsed.success) links.push(parsed.data);
-    else invalid.push(line.trim());
-  }
-
-  return { languageId: language.data, uiLocale: locale as Locale, links, invalid };
+  return lines
+    .slice(open + 1, close)
+    .filter((line) => line.trim())
+    .map((text, i) => ({ text, checked: true, number: i + 1, legacy: true }));
 }

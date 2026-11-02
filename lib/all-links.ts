@@ -1,8 +1,8 @@
-import { formatCsvRow, parseCsvRecords, type CsvRecord } from "./csv";
+import { formatCsvRow, parseCsv, parseCsvRecords, type CsvRecord } from "./csv";
 import { urlVariants } from "./known-links";
 import type { RepoLink } from "./repo-markdown";
 
-export const ALL_LINKS_HEADER = "language_id,url,note,source,decided_at,issue";
+export const ALL_LINKS_HEADER = "language_id,url,note,ui_locale,source,decided_at,issue";
 
 function byCodeUnit(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
@@ -49,11 +49,23 @@ export function allLinksCsv(upstream: Map<string, RepoLink[]>, acceptedCsv: stri
   const lines = [ALL_LINKS_HEADER];
   for (const id of [...new Set([...upstream.keys(), ...accepted.keys()])].sort(byCodeUnit)) {
     for (const row of accepted.get(id) ?? []) {
-      lines.push(formatCsvRow([id, row.url, row.note, "accepted", row.decided_at, row.issue]));
+      lines.push(formatCsvRow([id, row.url, row.note, row.ui_locale, "accepted", row.decided_at, row.issue]));
     }
     for (const link of upstream.get(id) ?? []) {
-      lines.push(formatCsvRow([id, link.url, link.note ?? "", "upstream", "", ""]));
+      lines.push(formatCsvRow([id, link.url, link.note ?? "", "", "upstream", "", ""]));
     }
   }
   return lines.join("\n") + "\n";
+}
+
+/** The upstream rows saved in an all-links.csv, so the file can be rebuilt
+ * with new approvals without downloading upstream again. */
+export function upstreamFromAllLinksCsv(csv: string): Map<string, RepoLink[]> {
+  const [, ...rows] = parseCsv(csv);
+  const upstream = new Map<string, RepoLink[]>();
+  for (const [id, url, note, , source] of rows) {
+    if (source !== "upstream" || !id || !url) continue;
+    upstream.set(id, [...(upstream.get(id) ?? []), { url, note: note || null }]);
+  }
+  return upstream;
 }

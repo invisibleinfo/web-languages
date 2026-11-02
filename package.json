@@ -12,7 +12,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "sync-repo-links": "tsx scripts/sync-repo-links.ts"
+    "sync-repo-links": "tsx scripts/sync-repo-links.ts",
+    "refresh-all-links": "tsx scripts/refresh-all-links.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2",

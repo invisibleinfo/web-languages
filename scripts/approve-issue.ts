@@ -1,12 +1,15 @@
 /**
  * Run by .github/workflows/approve-submission.yml, not by hand. Turns a
- * reviewed submission issue into rows of a CSV file in the repo.
+ * reviewed submission issue into rows of CSV files in the repo.
  *
- *   MODE=approve  issue labelled `approved` → rows appended to data/accepted.csv
- *   MODE=reject   issue labelled `rejected`, or closed as "not planned" →
- *                 rows appended to data/rejected.csv (once per issue)
- *   MODE=finish   after the workflow pushed the CSV → comment on and close the
- *                 issue (as CLOSE_REASON, default "completed")
+ *   MODE=validate issue labelled `validated` → ticked links appended to
+ *                 data/accepted.csv, unticked ones to data/rejected.csv, and
+ *                 data/all-links.csv rebuilt. Text a maintainer wrote at the
+ *                 end of a link's line becomes the `reason` column.
+ *   MODE=reject   issue closed as "not planned" → every link appended to
+ *                 data/rejected.csv (once per issue)
+ *   MODE=finish   after the workflow pushed the CSVs → comment on and close
+ *                 the issue
  *
  * Closing happens in a separate step so a failed push never leaves a closed
  * issue whose links were not saved.
@@ -16,14 +19,16 @@
  */
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { approvalComment, approvedRecords, rejectedRecords, rejectionComment } from "../lib/approval";
+import { allLinksCsv, upstreamFromAllLinksCsv } from "../lib/all-links";
+import { approvedRecords, rejectedRecords, validationComment } from "../lib/approval";
 import { appendCsvRecords, parseCsvRecords } from "../lib/csv";
-import { APPROVED_LABEL, parseIssueBody, SUBMISSION_LABEL } from "../lib/submission-issue";
+import { parseIssueBody, SUBMISSION_LABEL, VALIDATED_LABEL } from "../lib/submission-issue";
 
 // Actions sets GITHUB_API_URL itself; the fallback is for running locally.
 const API = process.env.GITHUB_API_URL ?? "https://api.github.com";
 const ACCEPTED_CSV = path.join(__dirname, "..", "data", "accepted.csv");
 const REJECTED_CSV = path.join(__dirname, "..", "data", "rejected.csv");
+const ALL_LINKS_CSV = path.join(__dirname, "..", "data", "all-links.csv");
 
 function env(name: string): string {
   const value = process.env[name];
@@ -87,7 +92,7 @@ async function readCsv(file: string): Promise<string> {
   }
 }
 
-async function approve() {
+async function validate() {
   if (!(await senderCanDecide())) return;
 
   const { issue, parsed } = await loadSubmission();
@@ -98,28 +103,53 @@ async function approve() {
   if (!parsed) {
     await github(`/issues/${issueNumber}/comments`, {
       method: "POST",
-      body: JSON.stringify({ body: "Could not read the language, UI language and link list in this issue, so nothing was added." }),
+      body: JSON.stringify({ body: "Could not read the language, UI language and link list in this issue, so nothing was recorded." }),
     });
     throw new Error("Issue body is not a readable submission");
   }
 
-  const existing = await readCsv(ACCEPTED_CSV);
-  const { records, duplicates } = approvedRecords(parsed, existing, {
-    issue: issueNumber,
-    decidedAt: new Date().toISOString(),
-  });
-  if (records.length > 0) {
-    await writeFile(ACCEPTED_CSV, appendCsvRecords(existing, records), "utf-8");
+  const acceptedCsv = await readCsv(ACCEPTED_CSV);
+  const rejectedCsv = await readCsv(REJECTED_CSV);
+  // A run that pushed but failed to close the issue: don't record it twice.
+  if (isRecorded(acceptedCsv) || isRecorded(rejectedCsv)) {
+    console.log("Issue is already recorded; only closing it.");
+    await writeResult("Already recorded in the CSV files; closing this issue.");
+    return;
   }
-  console.log(`Added ${records.length} link(s); skipped ${duplicates.length} duplicate(s).`);
 
-  await writeFile(
-    resultFile(),
-    JSON.stringify({ comment: approvalComment(records.length, duplicates, parsed.invalid) }),
-    "utf-8",
+  const decision = { issue: issueNumber, decidedAt: new Date().toISOString() };
+  const { records: accepted, duplicates } = approvedRecords(parsed, acceptedCsv, decision);
+  const rejected = rejectedRecords(parsed, decision);
+
+  const newAccepted = accepted.length > 0 ? appendCsvRecords(acceptedCsv, accepted) : acceptedCsv;
+  if (accepted.length > 0) await writeFile(ACCEPTED_CSV, newAccepted, "utf-8");
+  if (rejected.length > 0) await writeFile(REJECTED_CSV, appendCsvRecords(rejectedCsv, rejected), "utf-8");
+  await rebuildAllLinks(newAccepted);
+  console.log(
+    `Accepted ${accepted.length} link(s), rejected ${rejected.length}; skipped ${duplicates.length} duplicate(s).`,
   );
+
+  await writeResult(validationComment(accepted.length, rejected.length, duplicates, parsed.invalid));
 }
 
+/** Whether a decisions file already has rows for this issue. */
+function isRecorded(csv: string): boolean {
+  return parseCsvRecords(csv).some((row) => row.issue === String(issueNumber));
+}
+
+/** Rewrites data/all-links.csv from the upstream rows it already holds plus
+ * every accepted link. Upstream is not downloaded here; see
+ * scripts/refresh-all-links.ts. */
+async function rebuildAllLinks(acceptedCsv: string) {
+  const upstream = upstreamFromAllLinksCsv(await readCsv(ALL_LINKS_CSV));
+  await writeFile(ALL_LINKS_CSV, allLinksCsv(upstream, acceptedCsv), "utf-8");
+}
+
+async function writeResult(comment: string) {
+  await writeFile(resultFile(), JSON.stringify({ comment }), "utf-8");
+}
+
+/** An issue closed as "not planned": every link is rejected, ticked or not. */
 async function reject() {
   if (!(await senderCanDecide())) return;
 
@@ -128,22 +158,24 @@ async function reject() {
     console.log("Not a readable submission issue; nothing to record.");
     return;
   }
-  if (labels.includes(APPROVED_LABEL)) {
-    console.log("Issue is approved; not recording a rejection.");
+  if (labels.includes(VALIDATED_LABEL)) {
+    console.log("Issue is validated; not recording a rejection.");
     return;
   }
-  // The label and a manual "not planned" close can both fire for one issue.
+  const acceptedCsv = await readCsv(ACCEPTED_CSV);
   const existing = await readCsv(REJECTED_CSV);
-  if (parseCsvRecords(existing).some((row) => row.issue === String(issueNumber))) {
-    console.log("Issue is already recorded as rejected; nothing to do.");
+  if (isRecorded(acceptedCsv) || isRecorded(existing)) {
+    console.log("Issue is already recorded; nothing to do.");
     return;
   }
 
-  const records = rejectedRecords(parsed, { issue: issueNumber, decidedAt: new Date().toISOString() });
+  const records = rejectedRecords(
+    parsed,
+    { issue: issueNumber, decidedAt: new Date().toISOString() },
+    { all: true },
+  );
   await writeFile(REJECTED_CSV, appendCsvRecords(existing, records), "utf-8");
   console.log(`Recorded ${records.length} rejected link(s).`);
-
-  await writeFile(resultFile(), JSON.stringify({ comment: rejectionComment(records.length) }), "utf-8");
 }
 
 async function finish() {
@@ -157,11 +189,11 @@ async function finish() {
   await github(`/issues/${issueNumber}/comments`, { method: "POST", body: JSON.stringify({ body: comment }) });
   await github(`/issues/${issueNumber}`, {
     method: "PATCH",
-    body: JSON.stringify({ state: "closed", state_reason: process.env.CLOSE_REASON ?? "completed" }),
+    body: JSON.stringify({ state: "closed", state_reason: "completed" }),
   });
 }
 
-const modes: Record<string, () => Promise<void>> = { approve, reject, finish };
+const modes: Record<string, () => Promise<void>> = { validate, reject, finish };
 
 const run = modes[env("MODE")];
 if (!run) throw new Error(`Unknown MODE ${process.env.MODE}`);
