@@ -19,7 +19,7 @@ async function readIfExists(file: string): Promise<string | null> {
 
 /** Every link already known for a language, in both slash variants: the
  * upstream list (public/repo-links/<id>.json, written at build time) plus
- * links approved since (data/submissions.csv). `languageId` must already
+ * links approved since (data/accepted.csv). `languageId` must already
  * be validated — it becomes part of a file name. */
 export async function readKnownUrls(
   languageId: string,
@@ -27,7 +27,7 @@ export async function readKnownUrls(
 ): Promise<Set<string>> {
   const [upstream, approved] = await Promise.all([
     readIfExists(path.join(root, "public", "repo-links", `${languageId}.json`)),
-    readIfExists(path.join(root, "data", "submissions.csv")),
+    readIfExists(path.join(root, "data", "accepted.csv")),
   ]);
 
   const urls = [

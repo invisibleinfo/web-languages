@@ -1,9 +1,10 @@
 name: Process submission
 
-# A maintainer adds the `approved` label to accept a submission issue, or
-# closes it as "not planned" to reject it. Either way the links are recorded
-# in a CSV in this repo. Only the built-in per-run token is used; no secret
-# is stored for this workflow.
+# A maintainer ticks the links to accept in a submission issue, then adds the
+# `validated` label: ticked links go to data/accepted.csv, the rest to
+# data/rejected.csv. Closing the issue as "not planned" rejects every link.
+# Only the built-in per-run token is used; no secret is stored for this
+# workflow.
 on:
   issues:
     types: [labeled, closed]
@@ -18,8 +19,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  approve:
-    if: github.event.action == 'labeled' && github.event.label.name == 'approved'
+  validate:
+    if: >-
+      github.event.action == 'labeled' &&
+      github.event.label.name == 'validated' &&
+      contains(github.event.issue.labels.*.name, 'submission')
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -33,20 +37,20 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Add the approved links to data/submissions.csv
+      - name: Record the ticked and unticked links in the data CSVs
         run: npx tsx scripts/approve-issue.ts
         env:
-          MODE: approve
+          MODE: validate
       - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/submissions.csv
+          git add data/accepted.csv data/rejected.csv data/all-links.csv
           if git diff --cached --quiet; then
-            echo "No new links to commit."
+            echo "Nothing to commit."
             exit 0
           fi
-          git commit -m "Approve submission #${ISSUE_NUMBER}"
+          git commit -m "Validate submission #${ISSUE_NUMBER}"
           for attempt in 1 2 3; do
             git push origin "HEAD:${DEFAULT_BRANCH}" && exit 0
             git pull --rebase origin "${DEFAULT_BRANCH}"
@@ -67,6 +71,7 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       ISSUE_NUMBER: ${{ github.event.issue.number }}
+      SENDER: ${{ github.event.sender.login }}
       DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
     steps:
       - uses: actions/checkout@v4
