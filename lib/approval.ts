@@ -2,7 +2,8 @@ import { parseCsvRecords, type CsvRecord } from "./csv";
 import { urlVariants } from "./known-links";
 import type { ParsedIssue, ReviewedLink } from "./submission-issue";
 
-type Decision = { issue: number; decidedAt: string };
+/** `issue` is the issue's web address. */
+type Decision = { issue: string; decidedAt: string };
 
 function toRecord(parsed: ParsedIssue, link: ReviewedLink, { issue, decidedAt }: Decision): CsvRecord {
   return {
@@ -11,8 +12,7 @@ function toRecord(parsed: ParsedIssue, link: ReviewedLink, { issue, decidedAt }:
     note: link.note,
     ui_locale: parsed.uiLocale,
     decided_at: decidedAt,
-    issue: String(issue),
-    reason: link.reason,
+    issue,
   };
 }
 

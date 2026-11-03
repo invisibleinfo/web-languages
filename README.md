@@ -31,20 +31,19 @@ Each submission is an issue in `GITHUB_REPO`, labelled `submission`.
 1. Open the issue. Each link is a tick box, and the link itself is clickable
    (Ctrl/Cmd-click to open it in a new tab).
 2. Tick the links you accept. Links left unticked are rejected.
-3. Optional: to say why, type the reason at the end of that link's line (after
-   the link and any note), for example `... not Punjabi`. Comments are never
-   read. Don't put text before the link.
+3. Optional: to explain a decision, add a normal comment on the issue before
+   the next step. Comments are only for people to read; they are not saved in
+   the CSV files, but stay on the closed issue.
 4. Add the `validated` label. Ticked links are added to `data/accepted.csv`,
-   unticked ones to `data/rejected.csv` (with your reasons in the `reason`
-   column), a comment summarises it, and the issue closes. Leave the issue
-   open until then.
+   unticked ones to `data/rejected.csv`, a comment summarises it, and the
+   issue closes. Leave the issue open until then.
 
 To reject the whole submission, close the issue as "not planned" instead.
 Every link is then recorded in `data/rejected.csv`, ticked or not.
 
 To see every link in one place, open `data/all-links.csv` (or `/all-links.csv`
 on the live site) in Excel or Sheets. It lists the approved and upstream links
-per language. Rejected links and reasons are never in it. Approvals update it
+per language. Rejected links are never in it. Approvals update it
 automatically; the upstream part is a saved copy, so refresh it now and then
 with `npm run refresh-all-links` and commit the result.
 
@@ -102,7 +101,7 @@ live site. Without them the site still works, but sending a link fails.
    commits the files, and closes the issue. Railway redeploys on that commit.
 
 Both CSV files record the visitor's interface language (`ui_locale`), the
-issue number and the reviewer's reason, if any. The workflow uses only
+the link to the issue it came from (the `issue` column). The workflow uses only
 GitHub's built-in per-run token — no secret of ours is stored on GitHub - and
 ignores labels added by anyone without write access.
 

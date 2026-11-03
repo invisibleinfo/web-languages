@@ -4,8 +4,7 @@
  *
  *   MODE=validate issue labelled `validated` → ticked links appended to
  *                 data/accepted.csv, unticked ones to data/rejected.csv, and
- *                 data/all-links.csv rebuilt. Text a maintainer wrote at the
- *                 end of a link's line becomes the `reason` column.
+ *                 data/all-links.csv rebuilt
  *   MODE=reject   issue closed as "not planned" → every link appended to
  *                 data/rejected.csv (once per issue)
  *   MODE=finish   after the workflow pushed the CSVs → comment on and close
@@ -58,6 +57,7 @@ async function github<T>(route: string, init: RequestInit = {}): Promise<T> {
 }
 
 type Issue = {
+  html_url: string;
   state: string;
   body: string | null;
   labels: ({ name: string } | string)[];
@@ -111,13 +111,13 @@ async function validate() {
   const acceptedCsv = await readCsv(ACCEPTED_CSV);
   const rejectedCsv = await readCsv(REJECTED_CSV);
   // A run that pushed but failed to close the issue: don't record it twice.
-  if (isRecorded(acceptedCsv) || isRecorded(rejectedCsv)) {
+  if (isRecorded(acceptedCsv, issue.html_url) || isRecorded(rejectedCsv, issue.html_url)) {
     console.log("Issue is already recorded; only closing it.");
     await writeResult("Already recorded in the CSV files; closing this issue.");
     return;
   }
 
-  const decision = { issue: issueNumber, decidedAt: new Date().toISOString() };
+  const decision = { issue: issue.html_url, decidedAt: new Date().toISOString() };
   const { records: accepted, duplicates } = approvedRecords(parsed, acceptedCsv, decision);
   const rejected = rejectedRecords(parsed, decision);
 
@@ -133,8 +133,8 @@ async function validate() {
 }
 
 /** Whether a decisions file already has rows for this issue. */
-function isRecorded(csv: string): boolean {
-  return parseCsvRecords(csv).some((row) => row.issue === String(issueNumber));
+function isRecorded(csv: string, issueUrl: string): boolean {
+  return parseCsvRecords(csv).some((row) => row.issue === issueUrl);
 }
 
 /** Rewrites data/all-links.csv from the upstream rows it already holds plus
@@ -153,7 +153,7 @@ async function writeResult(comment: string) {
 async function reject() {
   if (!(await senderCanDecide())) return;
 
-  const { labels, parsed } = await loadSubmission();
+  const { issue, labels, parsed } = await loadSubmission();
   if (!parsed) {
     console.log("Not a readable submission issue; nothing to record.");
     return;
@@ -164,14 +164,14 @@ async function reject() {
   }
   const acceptedCsv = await readCsv(ACCEPTED_CSV);
   const existing = await readCsv(REJECTED_CSV);
-  if (isRecorded(acceptedCsv) || isRecorded(existing)) {
+  if (isRecorded(acceptedCsv, issue.html_url) || isRecorded(existing, issue.html_url)) {
     console.log("Issue is already recorded; nothing to do.");
     return;
   }
 
   const records = rejectedRecords(
     parsed,
-    { issue: issueNumber, decidedAt: new Date().toISOString() },
+    { issue: issue.html_url, decidedAt: new Date().toISOString() },
     { all: true },
   );
   await writeFile(REJECTED_CSV, appendCsvRecords(existing, records), "utf-8");
