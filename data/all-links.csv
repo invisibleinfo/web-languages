@@ -1116,7 +1116,7 @@ ell,https://www.tovima.gr/,Weekly News,,upstream,,
 ell,https://www.visitgreece.gr/el/,Greek tourism website,,upstream,,
 ell,https://www.ypes.gr/,Ministry of the Interior,,upstream,,
 ell,https://ypep.gr/,Minister of State,,upstream,,
-eng,https://example.com,test,en,accepted,2026-11-03T11:26:06.086Z,5
+eng,https://example.com,test,en,accepted,2026-11-03T11:26:06.086Z,https://github.com/invisibleinfo/web-languages/issues/5
 epo,http://neniammilitointerni.over-blog.com,,,upstream,,
 epo,http://www.esperanto.org,,,upstream,,
 epo,https://eo.mondediplo.com,,,upstream,,
@@ -3086,7 +3086,7 @@ oso,https://www.naijschools.com/interesting-facts-about-the-people-of-ososo-ethn
 oss,https://os.wikipedia.org,,,upstream,,
 pag,https://pag.wikipedia.org,,,upstream,,
 pam,https://pam.wikipedia.org,,,upstream,,
-pan,https://punjabi.com/poetry,,hi,accepted,2026-11-02T23:14:58.714Z,3
+pan,https://punjabi.com/poetry,,hi,accepted,2026-11-02T23:14:58.714Z,https://github.com/invisibleinfo/web-languages/issues/3
 pan,http://punjabpolice.gov.in/,Punjabi Police - India,,upstream,,
 pan,https://aapkaramrajya.com/punjab/,Aam Aadmi Party,,upstream,,
 pan,https://ajitjalandhar.com/,Ajit - Daily News,,upstream,,

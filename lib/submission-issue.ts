@@ -3,11 +3,9 @@ import { languageIdSchema, urlRowSchema } from "./validation";
 
 export type SubmittedLink = { url: string; note: string };
 
-const MAX_REASON_LENGTH = 300;
-
-/** A link as read back from an issue: its number, whether the maintainer
- * ticked it, and any reason they wrote after it on the same line. */
-export type ReviewedLink = SubmittedLink & { number: number; checked: boolean; reason: string };
+/** A link as read back from an issue: its number, and whether the maintainer
+ * ticked it. */
+export type ReviewedLink = SubmittedLink & { number: number; checked: boolean };
 
 export type IssueDraft = { title: string; labels: string[]; body: string };
 
@@ -54,7 +52,7 @@ export function buildIssue(
       `UI language: ${uiLocale}`,
       "",
       "Tick the links to accept. Links left unticked are considered as rejected.",
-      "To give a reason, type it at the end of the link's line.",
+      "To explain a decision, add a comment before adding the label. Comments are only for people to read.",
       "",
       ...lines,
       "",
@@ -85,28 +83,22 @@ function readSpan(text: string): { value: string; rest: string } | null {
 
 const TASK_LINE = /^\s*[-*+]\s+\[([ xX])\]\s+(?:\*\*(\d+)\.\*\*\s+)?(.*)$/;
 
-const cleanReason = (text: string) => text.replace(/\s+/g, " ").trim().slice(0, MAX_REASON_LENGTH);
-
-/** The url, note and reason on one link line: `<url> | \`note\` reason`. The
- * note is optional, and the reason is whatever follows the url or the note. */
-function splitLink(line: string): { url: string; note: string; reason: string } {
+/** The url and note on one link line: `<url> | \`note\``. Anything else on
+ * the line is ignored. */
+function splitLink(line: string): { url: string; note: string } {
   const address = readSpan(line.trim());
-  if (!address) return { url: line.trim(), note: "", reason: "" };
+  if (!address) return { url: line.trim(), note: "" };
   const after = address.rest.trim();
-  if (!after.startsWith("|")) return { url: address.value, note: "", reason: cleanReason(after) };
+  if (!after.startsWith("|")) return { url: address.value, note: "" };
   const noteText = after.slice(1).trim();
-  const note = noteText.startsWith("`") ? readSpan(noteText) : null;
-  return note
-    ? { url: address.value, note: note.value, reason: cleanReason(note.rest) }
-    : { url: address.value, note: noteText, reason: "" };
+  const note = noteText.startsWith("`") ? (readSpan(noteText)?.value ?? noteText) : noteText;
+  return { url: address.value, note };
 }
 
 /** A line from the old code-fence list: `url | note`, the note as plain text. */
-function splitLegacyLink(line: string): { url: string; note: string; reason: string } {
+function splitLegacyLink(line: string): { url: string; note: string } {
   const split = line.indexOf(" | ");
-  return split === -1
-    ? { url: line, note: "", reason: "" }
-    : { url: line.slice(0, split), note: line.slice(split + 3), reason: "" };
+  return split === -1 ? { url: line, note: "" } : { url: line.slice(0, split), note: line.slice(split + 3) };
 }
 
 /** Reads an issue body back, as it is *now* (including ticks and hand edits).
@@ -123,9 +115,9 @@ export function parseIssueBody(body: string): ParsedIssue | null {
   const links: ReviewedLink[] = [];
   const invalid: string[] = [];
   for (const { text, checked, number, legacy } of entries) {
-    const { url, note, reason } = legacy ? splitLegacyLink(text) : splitLink(text);
+    const { url, note } = legacy ? splitLegacyLink(text) : splitLink(text);
     const parsed = urlRowSchema.safeParse({ url, note });
-    if (parsed.success) links.push({ ...parsed.data, number, checked, reason });
+    if (parsed.success) links.push({ ...parsed.data, number, checked });
     else invalid.push(text.trim());
   }
 
