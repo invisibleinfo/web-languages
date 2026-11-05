@@ -27,8 +27,8 @@ before they are added.
 ## Reviewing submissions (for Moderators)
 
 Every time someone sends links on the site, a new **issue** appears in our
-GitHub repo with the `submission` label. Your job is to check each link if it is relevant. 
-No coding or github experience needed. You
+GitHub repo with the `submission` label. Your job is to check whether each link is relevant.
+No coding or GitHub experience needed. You
 only need a GitHub account with access to this repo.
 
 1. **Choose an open issue** from the Issues tab that has the `submission` label.
@@ -48,7 +48,7 @@ Added the label too early or by mistake? Tell a maintainer.
 
 **Everything looks wrong?** You can reject the whole submission in either
 way, and every link is recorded as rejected:
-   - Don't tick any boxe and add the `validated` label, like usual, or
+   - Don't tick any box. Just add the `validated` label, like usual, or
    - Close the issue as **"not planned"** (the button next to "Close issue").
 
 To see every link in one place, open `data/all-links.csv` in Excel or Sheets. It lists the approved and upstream links per language. Rejected links are never in it. Approvals update it
